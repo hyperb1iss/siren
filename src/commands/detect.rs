@@ -57,11 +57,18 @@ where
             Vec::new()
         };
 
-        // Detect project information with patterns if provided
+        // Prepare paths for detection
+        let paths_to_detect = if all_paths.is_empty() {
+            vec![PathBuf::from(".")]
+        } else {
+            all_paths.clone()
+        };
+
+        // Detect project information
         let project_info = if !patterns.is_empty() {
             self.detector.detect_with_patterns(dir, &patterns)?
         } else {
-            self.detector.detect(dir)?
+            self.detector.detect(&paths_to_detect)?
         };
 
         // Display detected project info

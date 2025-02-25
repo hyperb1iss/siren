@@ -97,17 +97,18 @@ where
             Vec::new()
         };
 
-        // Detect project information with patterns if provided
+        // Prepare paths for detection
+        let paths_to_detect = if all_paths.is_empty() {
+            vec![PathBuf::from(".")]
+        } else {
+            all_paths.clone()
+        };
+
+        // Detect project information
         let project_info = if !patterns.is_empty() {
             self.detector.detect_with_patterns(dir, &patterns)?
         } else {
-            let paths_to_detect = if all_paths.is_empty() {
-                vec![PathBuf::from(".")]
-            } else {
-                all_paths.clone()
-            };
-            self.detector
-                .detect(paths_to_detect.first().unwrap().as_path())?
+            self.detector.detect(&paths_to_detect)?
         };
 
         // Always display detected project info if we didn't run format first

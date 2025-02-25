@@ -57,7 +57,12 @@ where
 
         // Combine paths from the Cli struct and CheckArgs
         let all_paths = if args_paths.is_empty() {
-            paths.clone()
+            if paths.is_empty() {
+                // If no paths provided at all, use current directory
+                vec![PathBuf::from(".")]
+            } else {
+                paths.clone()
+            }
         } else {
             args_paths
         };
@@ -68,23 +73,8 @@ where
             .map(|p| p.as_path())
             .unwrap_or_else(|| Path::new("."));
 
-        // Extract path patterns (anything after the first path)
-        let patterns: Vec<String> = if all_paths.len() > 1 {
-            all_paths
-                .iter()
-                .skip(1)
-                .map(|p| p.to_string_lossy().to_string())
-                .collect()
-        } else {
-            Vec::new()
-        };
-
-        // Detect project information with patterns if provided
-        let project_info = if !patterns.is_empty() {
-            self.detect_project_with_patterns(dir, &patterns)?
-        } else {
-            self.detect_project(&all_paths)?
-        };
+        // Detect project information
+        let project_info = self.detect_project(&all_paths)?;
 
         // Display detected project info based on verbosity
         if self.verbosity >= Verbosity::Normal {
@@ -99,32 +89,60 @@ where
         let _total_files: usize = project_info.file_counts.values().sum();
         let _files_by_language = project_info.file_counts.clone();
 
-        // Get files to check
-        let files = if git_modified_only {
-            let dir = all_paths
-                .first()
-                .map(|p| p.as_path())
-                .unwrap_or_else(|| Path::new("."));
-            crate::utils::get_git_modified_files(dir)?
-        } else if all_paths.is_empty() {
-            // If no paths are specified, use the current directory
-            let current_dir = Path::new(".");
-            crate::utils::collect_files_with_gitignore(current_dir)?
+        // Collect files to check
+        let files_to_check = if git_modified_only {
+            // Get files modified in git
+            let git_files = crate::utils::get_git_modified_files(dir)?;
+
+            // Filter git files to only include those that match our paths
+            if all_paths.len() == 1 && all_paths[0] == PathBuf::from(".") {
+                // If only the current directory is specified, use all git files
+                git_files
+            } else {
+                git_files
+                    .into_iter()
+                    .filter(|file| {
+                        all_paths.iter().any(|path| {
+                            if path.is_dir() {
+                                file.starts_with(path)
+                            } else {
+                                file == path
+                            }
+                        })
+                    })
+                    .collect()
+            }
         } else {
-            // Expand directories to files
             let mut all_files = Vec::new();
 
-            for path in &all_paths {
-                if path.is_dir() {
-                    let dir_files = crate::utils::collect_files_with_gitignore(path)?;
-                    all_files.extend(dir_files);
-                } else if path.is_file() {
-                    all_files.push(path.clone());
+            // If only the current directory is specified, scan it
+            if all_paths.len() == 1 && all_paths[0] == PathBuf::from(".") {
+                let dir_files = crate::utils::collect_files_with_gitignore(Path::new("."))?;
+                all_files.extend(dir_files);
+            } else {
+                for path in &all_paths {
+                    if path.is_file() {
+                        // If it's a specific file, just add it directly
+                        all_files.push(path.clone());
+                    } else if path.is_dir() {
+                        // If it's a directory, collect files from it
+                        let dir_files = crate::utils::collect_files_with_gitignore(path)?;
+                        all_files.extend(dir_files);
+                    }
                 }
             }
 
             all_files
         };
+
+        // Debug output for files to check
+        if self.verbosity >= Verbosity::Verbose {
+            println!("\nFiles to check: {}", files_to_check.len());
+            for file in &files_to_check {
+                println!("  - {}", file.display());
+            }
+            println!();
+        }
 
         // Get default tool config
         let default_tool_config = config.tools.get("default").cloned().unwrap_or_default();
@@ -144,7 +162,7 @@ where
 
         // Group tools by their config hash to run tools with the same config together
         let mut tool_groups: HashMap<String, Vec<(Arc<dyn LintTool>, usize)>> = HashMap::new();
-        
+
         // Set up all tools first and group them by config
         for linter in &tools {
             // Get tool-specific config or use default
@@ -159,7 +177,7 @@ where
 
             // Convert to the correct ToolConfig type for the runner
             let config_for_runner = convert_tool_config(&config_tool_config);
-            
+
             // Create a simple hash of the config to use as a key for grouping
             // This is a simplification - in a real implementation we might want a better way to compare configs
             let config_key = format!("{:?}", config_for_runner);
@@ -172,7 +190,11 @@ where
 
             // Execute the tool - without logging the execution details unless in verbose mode
             if self.verbosity >= Verbosity::Verbose {
-                debug!("Running linter: {} on {} files", linter.name(), files.len());
+                debug!(
+                    "Running linter: {} on {} files",
+                    linter.name(),
+                    files_to_check.len()
+                );
             }
 
             // Group tools by their config
@@ -192,12 +214,12 @@ where
             // Extract tools and spinner indices
             let group_tools: Vec<_> = group.iter().map(|(tool, _)| tool.clone()).collect();
             let group_spinner_indices: Vec<_> = group.iter().map(|(_, idx)| *idx).collect();
-            
+
             // Skip empty groups
             if group_tools.is_empty() {
                 continue;
             }
-            
+
             // Get the config for this group (they all have the same config)
             let linter = &group_tools[0];
             let mut config_tool_config = config
@@ -210,7 +232,7 @@ where
 
             // Run all tools in this group in parallel
             let group_results = tool_runner
-                .run_tools(group_tools.clone(), &files, &config_for_runner)
+                .run_tools(group_tools.clone(), &files_to_check, &config_for_runner)
                 .await;
 
             // Process results for this group
@@ -325,13 +347,7 @@ where
 
     /// Detect project information from the provided paths
     fn detect_project(&self, paths: &[PathBuf]) -> Result<ProjectInfo, SirenError> {
-        // Use the first path or current dir if empty
-        let dir = paths
-            .first()
-            .map(|p| p.as_path())
-            .unwrap_or_else(|| Path::new("."));
-
-        self.detector.detect(dir)
+        self.detector.detect(paths)
     }
 
     /// Detect project information with specific path patterns
@@ -340,6 +356,8 @@ where
         dir: &Path,
         patterns: &[String],
     ) -> Result<ProjectInfo, SirenError> {
+        // This method is kept for backward compatibility but is no longer used
+        // in the execute method. We now handle paths directly in the detect method.
         self.detector.detect_with_patterns(dir, patterns)
     }
 

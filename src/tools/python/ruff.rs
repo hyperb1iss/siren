@@ -39,6 +39,8 @@ impl Ruff {
 
         for capture in regex.captures_iter(output) {
             let file_str = capture.get(1).unwrap().as_str();
+            let file_path = PathBuf::from(file_str);
+
             let line = capture
                 .get(2)
                 .unwrap()
@@ -62,9 +64,6 @@ impl Ruff {
             } else {
                 IssueSeverity::Style
             };
-
-            // Create a PathBuf for the file
-            let file_path = PathBuf::from(file_str);
 
             issues.push(LintIssue {
                 severity,
@@ -119,8 +118,8 @@ impl Ruff {
         // Add output format
         command.arg("--output-format=full");
 
-        // Add all the files to check
-        for file in files_to_check {
+        // Add all the files to check - explicitly pass each file path
+        for file in &files_to_check {
             command.arg(file);
         }
 
@@ -179,8 +178,8 @@ impl Ruff {
         // Add output format
         command.arg("--output-format=full");
 
-        // Add all the files to fix
-        for file in files_to_check {
+        // Add all the files to fix - explicitly pass each file path
+        for file in &files_to_check {
             command.arg(file);
         }
 

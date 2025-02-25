@@ -124,8 +124,8 @@ impl PyLint {
             command.arg(arg);
         }
 
-        // Add all the files to check
-        for file in files_to_check {
+        // Add all the files to check - explicitly pass each file path
+        for file in &files_to_check {
             command.arg(file);
         }
 

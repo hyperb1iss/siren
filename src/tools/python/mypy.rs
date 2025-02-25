@@ -39,6 +39,8 @@ impl MyPy {
 
         for capture in regex.captures_iter(output) {
             let file_str = capture.get(1).unwrap().as_str();
+            let file_path = PathBuf::from(file_str);
+
             let line = capture
                 .get(2)
                 .unwrap()
@@ -57,9 +59,6 @@ impl MyPy {
                 "note" => IssueSeverity::Info,
                 _ => IssueSeverity::Warning,
             };
-
-            // Create a PathBuf for the file
-            let file_path = PathBuf::from(file_str);
 
             issues.push(LintIssue {
                 severity,
@@ -103,8 +102,8 @@ impl MyPy {
             command.arg(arg);
         }
 
-        // Add all the files to check
-        for file in files_to_check {
+        // Add all the files to check - explicitly pass each file path
+        for file in &files_to_check {
             command.arg(file);
         }
 

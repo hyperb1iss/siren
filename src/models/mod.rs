@@ -29,7 +29,7 @@ pub struct ProjectInfo {
 }
 
 /// A tool detected in the project (like an existing linter config)
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct DetectedTool {
     /// Name of the detected tool
     pub name: String,

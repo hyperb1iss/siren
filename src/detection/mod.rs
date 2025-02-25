@@ -9,8 +9,8 @@ mod tool_detection;
 
 /// Trait for detecting project information
 pub trait ProjectDetector {
-    /// Detect project information from a directory
-    fn detect(&self, dir: &Path) -> Result<ProjectInfo, SirenError>;
+    /// Detect project information from paths
+    fn detect(&self, paths: &[PathBuf]) -> Result<ProjectInfo, SirenError>;
 
     /// Detect project information with specific path patterns
     fn detect_with_patterns(
@@ -124,92 +124,87 @@ impl DefaultProjectDetector {
 }
 
 impl ProjectDetector for DefaultProjectDetector {
-    fn detect(&self, dir: &Path) -> Result<ProjectInfo, SirenError> {
-        // Check if the path exists
-        if !dir.exists() {
-            return Err(DetectionError::InvalidDirectory(dir.to_path_buf()).into());
-        }
-
-        // If the "directory" is actually a file, use its parent directory
-        // and call detect_with_patterns with the filename
-        if dir.is_file() {
-            // Get the absolute path to make sure we can reliably get the parent
-            let absolute_path = if dir.is_absolute() {
-                dir.to_path_buf()
-            } else {
-                std::env::current_dir()
-                    .map_err(DetectionError::Io)?
-                    .join(dir)
-            };
-
-            // Get the parent directory
-            let parent_dir = absolute_path
-                .parent()
-                .ok_or_else(|| DetectionError::InvalidDirectory(dir.to_path_buf()))?;
-
-            // Make sure the parent directory exists
-            if !parent_dir.exists() || !parent_dir.is_dir() {
-                return Err(DetectionError::InvalidDirectory(parent_dir.to_path_buf()).into());
-            }
-
-            // Get the filename as a string for the pattern
-            let filename = absolute_path
-                .file_name()
-                .map(|name| name.to_string_lossy().to_string())
-                .ok_or_else(|| DetectionError::InvalidDirectory(dir.to_path_buf()))?;
-
-            // Use the detect_with_patterns method with the filename as a pattern
-            println!(
-                "Detecting single file: {} in directory: {}",
-                filename,
-                parent_dir.display()
-            );
-            return self.detect_with_patterns(parent_dir, &[filename]);
-        }
-
-        if !dir.is_dir() {
-            return Err(DetectionError::InvalidDirectory(dir.to_path_buf()).into());
+    fn detect(&self, paths: &[PathBuf]) -> Result<ProjectInfo, SirenError> {
+        if paths.is_empty() {
+            return Err(DetectionError::InvalidDirectory(PathBuf::from(".")).into());
         }
 
         let mut languages = HashMap::new();
         let mut file_count = 0;
+        let mut detected_tools = Vec::new();
 
-        // Walk directory tree and count files by language
-        let walker = walkdir::WalkDir::new(dir)
-            .max_depth(self.max_depth)
-            .into_iter()
-            .filter_entry(|e| {
-                // Skip hidden directories
-                let filename = e.file_name().to_string_lossy();
-                !filename.starts_with(".") || filename == "."
-            });
+        // Process each path individually
+        for path in paths {
+            // Check if the path exists
+            if !path.exists() {
+                return Err(DetectionError::InvalidDirectory(path.to_path_buf()).into());
+            }
 
-        for entry in walker.filter_map(Result::ok) {
-            if entry.file_type().is_file() {
+            if path.is_file() {
+                // For a single file, just detect its language
                 file_count += 1;
 
-                if let Some(ext) = entry.path().extension() {
+                if let Some(ext) = path.extension() {
                     if let Some(lang) =
                         self.detect_language_from_extension(ext.to_string_lossy().as_ref())
                     {
                         *languages.entry(lang).or_insert(0) += 1;
                     }
                 }
+            } else if path.is_dir() {
+                // For directories, walk the directory tree
+                let walker = walkdir::WalkDir::new(path)
+                    .max_depth(self.max_depth)
+                    .into_iter()
+                    .filter_entry(|e| {
+                        // Skip hidden directories
+                        let filename = e.file_name().to_string_lossy();
+                        !filename.starts_with(".") || filename == "."
+                    });
+
+                for entry in walker.filter_map(Result::ok) {
+                    if entry.file_type().is_file() {
+                        file_count += 1;
+
+                        if let Some(ext) = entry.path().extension() {
+                            if let Some(lang) =
+                                self.detect_language_from_extension(ext.to_string_lossy().as_ref())
+                            {
+                                *languages.entry(lang).or_insert(0) += 1;
+                            }
+                        }
+                    }
+                }
+
+                // Detect tools for this directory
+                let dir_tools = self.detect_tools(path);
+                for tool in dir_tools {
+                    if !detected_tools.contains(&tool) {
+                        detected_tools.push(tool);
+                    }
+                }
+            } else {
+                return Err(DetectionError::InvalidDirectory(path.to_path_buf()).into());
             }
         }
 
         // If no files found, return error
         if file_count == 0 {
-            return Err(
-                DetectionError::DetectionFailed("No files found in directory".to_string()).into(),
-            );
+            return Err(DetectionError::DetectionFailed(
+                "No files found in specified paths".to_string(),
+            )
+            .into());
         }
 
-        // Detect frameworks
-        let frameworks = self.detect_frameworks(dir);
-
-        // Detect tools
-        let detected_tools = self.detect_tools(dir);
+        // Detect frameworks - only if we're looking at directories
+        let frameworks = if paths.iter().any(|p| p.is_dir()) {
+            // Use the first directory for framework detection
+            let default_path = PathBuf::from(".");
+            let first_dir = paths.iter().find(|p| p.is_dir()).unwrap_or(&default_path);
+            self.detect_frameworks(first_dir)
+        } else {
+            Vec::new()
+        };
 
         // Create language list sorted by file count (most common first)
         let mut language_list: Vec<_> = languages.keys().cloned().collect();

@@ -55,14 +55,14 @@ where
             args_paths
         };
 
-        // Get project root directory
-        let dir = all_paths
+        // Get project root directory (for reference only)
+        let _dir = all_paths
             .first()
             .map(|p| p.as_path())
             .unwrap_or_else(|| Path::new("."));
 
-        // Extract path patterns (anything after the first path)
-        let patterns: Vec<String> = if all_paths.len() > 1 {
+        // Extract path patterns (anything after the first path) - no longer used
+        let _patterns: Vec<String> = if all_paths.len() > 1 {
             all_paths
                 .iter()
                 .skip(1)
@@ -72,18 +72,15 @@ where
             Vec::new()
         };
 
-        // Detect project information with patterns if provided
-        let project_info = if !patterns.is_empty() {
-            self.detector.detect_with_patterns(dir, &patterns)?
+        // Prepare paths for detection
+        let paths_to_detect = if all_paths.is_empty() {
+            vec![PathBuf::from(".")]
         } else {
-            let paths_to_detect = if all_paths.is_empty() {
-                vec![PathBuf::from(".")]
-            } else {
-                all_paths.clone()
-            };
-            self.detector
-                .detect(paths_to_detect.first().unwrap().as_path())?
+            all_paths.clone()
         };
+
+        // Detect project information
+        let project_info = self.detector.detect(&paths_to_detect)?;
 
         // Always display detected project info
         let info_output = self.output_formatter.format_detection(&project_info);
