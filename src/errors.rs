@@ -20,10 +20,6 @@ pub enum SirenError {
     /// I/O errors
     #[error("I/O error: {0}")]
     Io(#[from] io::Error),
-
-    /// Application errors
-    #[error("Application error: {0}")]
-    Application(String),
 }
 
 /// Configuration related errors
@@ -36,10 +32,6 @@ pub enum ConfigError {
     /// Error parsing configuration
     #[error("Failed to parse config: {0}")]
     ParseError(String),
-
-    /// Invalid configuration
-    #[error("Invalid configuration: {0}")]
-    InvalidConfig(String),
 
     /// I/O error
     #[error("I/O error: {0}")]

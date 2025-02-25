@@ -32,7 +32,6 @@ impl Clippy {
                         .to_string(),
                 tool_type: ToolType::Linter,
                 language: Language::Rust,
-                priority: 5,
             },
         }
     }
@@ -329,7 +328,6 @@ impl ClippyFixer {
                     .to_string(),
                 tool_type: ToolType::Fixer,
                 language: Language::Rust,
-                priority: 5,
             },
         }
     }

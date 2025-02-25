@@ -180,7 +180,7 @@ where
         let default_tool_config = ConfigToolConfig::default();
 
         // Create a tool runner
-        let tool_runner = ToolRunner::new(self.registry.clone());
+        let tool_runner = ToolRunner::new();
 
         // Prepare all available formatters
         let available_formatters: Vec<_> = formatters

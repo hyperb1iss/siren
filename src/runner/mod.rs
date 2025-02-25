@@ -8,18 +8,22 @@ use tokio::task;
 
 use crate::errors::ToolError;
 use crate::models::tools::ToolConfig;
-use crate::models::{Language, LintResult};
-use crate::tools::{LintTool, ToolRegistry};
+use crate::models::LintResult;
+use crate::tools::LintTool;
 
 /// Tool runner for executing tools in parallel
-pub struct ToolRunner<R: ToolRegistry> {
-    registry: R,
+pub struct ToolRunner {}
+
+impl Default for ToolRunner {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
-impl<R: ToolRegistry> ToolRunner<R> {
+impl ToolRunner {
     /// Create a new ToolRunner
-    pub fn new(registry: R) -> Self {
-        Self { registry }
+    pub fn new() -> Self {
+        Self {}
     }
 
     /// Run tools in parallel
@@ -62,28 +66,5 @@ impl<R: ToolRegistry> ToolRunner<R> {
                 })
             })
             .collect()
-    }
-
-    /// Run tools for a specific language
-    pub async fn run_tools_for_language(
-        &self,
-        language: Language,
-        files: &[PathBuf],
-        config: &ToolConfig,
-    ) -> Vec<Result<LintResult, ToolError>> {
-        let tools = self.registry.get_tools_for_language(language);
-        self.run_tools(tools, files, config).await
-    }
-
-    /// Run tools for a specific language and tool type
-    pub async fn run_tools_for_language_and_type(
-        &self,
-        language: Language,
-        tool_type: crate::models::ToolType,
-        files: &[PathBuf],
-        config: &ToolConfig,
-    ) -> Vec<Result<LintResult, ToolError>> {
-        let tools = self.registry.get_tools_for_language_and_type(language, tool_type);
-        self.run_tools(tools, files, config).await
     }
 }

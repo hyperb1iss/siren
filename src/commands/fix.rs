@@ -206,7 +206,7 @@ where
         let default_tool_config = config.tools.get("default").cloned().unwrap_or_default();
 
         // Create a tool runner
-        let tool_runner = ToolRunner::new(self.tool_registry.clone());
+        let tool_runner = ToolRunner::new();
 
         // Prepare all available fixers
         let available_fixers: Vec<_> = fixers.into_iter().filter(|f| f.is_available()).collect();

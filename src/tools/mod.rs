@@ -8,10 +8,7 @@ use crate::errors::ToolError;
 use crate::models::{Language, LintResult, ToolConfig, ToolType};
 
 mod python;
-mod registry;
 mod rust;
-
-// Re-export registry for public use
 
 // Re-export Python tools
 
@@ -50,11 +47,6 @@ pub trait LintTool: Send + Sync {
 
     /// Get the version of the tool, if available
     fn version(&self) -> Option<String>;
-
-    /// Get the tool's priority (higher priority tools run first)
-    fn priority(&self) -> usize {
-        0
-    }
 }
 
 /// Common functionality for tool implementations
@@ -70,30 +62,33 @@ pub struct ToolBase {
 
     /// Language this tool is for
     pub language: Language,
-
-    /// Priority of this tool
-    pub priority: usize,
 }
 
-/// Tool data shared between registry and execution code
+/// Tool information
 #[derive(Clone)]
 pub struct ToolInfo {
     /// Tool name
+    #[allow(dead_code)]
     pub name: String,
 
     /// Tool type
+    #[allow(dead_code)]
     pub tool_type: ToolType,
 
     /// Language this tool is for
+    #[allow(dead_code)]
     pub language: Language,
 
     /// Whether this tool is available on the system
+    #[allow(dead_code)]
     pub available: bool,
 
     /// Version of the tool
+    #[allow(dead_code)]
     pub version: Option<String>,
 
     /// Description of the tool
+    #[allow(dead_code)]
     pub description: String,
 }
 

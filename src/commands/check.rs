@@ -166,7 +166,7 @@ where
         default_tool_config.auto_fix = Some(args.auto_fix);
 
         // Create a tool runner
-        let tool_runner = ToolRunner::new(self.tool_registry.clone());
+        let tool_runner = ToolRunner::new();
 
         // Run each linter and collect results
         let mut all_results = Vec::new();

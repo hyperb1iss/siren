@@ -121,17 +121,6 @@ impl std::fmt::Display for IssueSeverity {
     }
 }
 
-impl IssueSeverity {
-    pub fn emoji(&self) -> &'static str {
-        match self {
-            IssueSeverity::Error => "❌",
-            IssueSeverity::Warning => "⚠️",
-            IssueSeverity::Info => "ℹ️",
-            IssueSeverity::Style => "💅",
-        }
-    }
-}
-
 /// Tool information
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolInfo {

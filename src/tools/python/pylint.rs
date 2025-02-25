@@ -22,10 +22,9 @@ impl PyLint {
         Self {
             base: ToolBase {
                 name: "pylint".to_string(),
-                description: "A Python static code analysis tool".to_string(),
+                description: "Python static code analyzer".to_string(),
                 tool_type: ToolType::Linter,
                 language: Language::Python,
-                priority: 5,
             },
         }
     }
@@ -214,9 +213,5 @@ impl LintTool for PyLint {
 
     fn version(&self) -> Option<String> {
         utils::get_command_version("pylint", &["--version"])
-    }
-
-    fn priority(&self) -> usize {
-        self.base.priority
     }
 }

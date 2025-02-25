@@ -25,7 +25,6 @@ impl MyPy {
                 description: "Static type checker for Python".to_string(),
                 tool_type: ToolType::TypeChecker,
                 language: Language::Python,
-                priority: 7,
             },
         }
     }
@@ -196,9 +195,5 @@ impl LintTool for MyPy {
 
     fn version(&self) -> Option<String> {
         utils::get_command_version("mypy", &["--version"])
-    }
-
-    fn priority(&self) -> usize {
-        self.base.priority
     }
 }

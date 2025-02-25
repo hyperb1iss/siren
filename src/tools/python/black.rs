@@ -24,7 +24,6 @@ impl Black {
                 description: "The uncompromising Python code formatter".to_string(),
                 tool_type: ToolType::Formatter,
                 language: Language::Python,
-                priority: 10,
             },
         }
     }
@@ -207,9 +206,5 @@ impl LintTool for Black {
 
     fn version(&self) -> Option<String> {
         utils::get_command_version("black", &["--version"])
-    }
-
-    fn priority(&self) -> usize {
-        self.base.priority
     }
 }

@@ -24,7 +24,6 @@ impl Rustfmt {
                 description: "The Rust code formatter".to_string(),
                 tool_type: ToolType::Formatter,
                 language: Language::Rust,
-                priority: 10,
             },
         }
     }

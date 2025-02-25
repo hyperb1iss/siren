@@ -18,7 +18,6 @@ mod test_mocks {
         description: String,
         available: bool,
         version: Option<String>,
-        priority: usize,
     }
 
     impl MockTool {
@@ -30,7 +29,6 @@ mod test_mocks {
             description: &str,
             available: bool,
             version: Option<String>,
-            priority: usize,
         ) -> Arc<Self> {
             Arc::new(Self {
                 name: name.to_string(),
@@ -39,7 +37,6 @@ mod test_mocks {
                 description: description.to_string(),
                 available,
                 version,
-                priority,
             })
         }
     }
@@ -104,10 +101,6 @@ mod test_mocks {
         fn version(&self) -> Option<String> {
             self.version.clone()
         }
-
-        fn priority(&self) -> usize {
-            self.priority
-        }
     }
 }
 
@@ -132,7 +125,6 @@ fn test_registry_can_register_tool() {
         "A mock Rust formatter",
         true,
         Some("1.0.0".to_string()),
-        0,
     );
 
     // Register the tool
@@ -164,7 +156,6 @@ fn test_registry_get_tools_by_language() {
         "A mock Rust formatter",
         true,
         Some("1.0.0".to_string()),
-        0,
     );
 
     let python_tool = MockTool::new(
@@ -174,7 +165,6 @@ fn test_registry_get_tools_by_language() {
         "A mock Python formatter",
         true,
         Some("22.1.0".to_string()),
-        0,
     );
 
     registry.register_tool(rust_tool);
@@ -206,7 +196,6 @@ fn test_registry_get_tools_by_type() {
         "A mock Rust formatter",
         true,
         Some("1.0.0".to_string()),
-        0,
     );
 
     let linter = MockTool::new(
@@ -216,7 +205,6 @@ fn test_registry_get_tools_by_type() {
         "A mock Rust linter",
         true,
         Some("0.9.0".to_string()),
-        0,
     );
 
     registry.register_tool(formatter);
@@ -248,7 +236,6 @@ fn test_registry_get_tools_for_language_and_type() {
         "A mock Rust formatter",
         true,
         Some("1.0.0".to_string()),
-        0,
     );
 
     let rust_linter = MockTool::new(
@@ -258,7 +245,6 @@ fn test_registry_get_tools_for_language_and_type() {
         "A mock Rust linter",
         true,
         Some("0.9.0".to_string()),
-        0,
     );
 
     let python_formatter = MockTool::new(
@@ -268,7 +254,6 @@ fn test_registry_get_tools_for_language_and_type() {
         "A mock Python formatter",
         true,
         Some("22.1.0".to_string()),
-        0,
     );
 
     registry.register_tool(rust_formatter);

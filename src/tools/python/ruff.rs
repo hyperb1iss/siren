@@ -25,7 +25,6 @@ impl Ruff {
                 description: "An extremely fast Python linter, written in Rust".to_string(),
                 tool_type: ToolType::Linter,
                 language: Language::Python,
-                priority: 8,
             },
         }
     }
@@ -197,54 +196,6 @@ impl Ruff {
 
         Ok((stdout, stderr))
     }
-
-    /// Fix issues with ruff
-    fn fix_file(
-        &self,
-        file: &Path,
-        config: &ModelsToolConfig,
-    ) -> Result<(String, String), ToolError> {
-        let mut command = Command::new("ruff");
-        command.arg("check");
-        command.arg("--fix");
-
-        // Add line length if specified in extra args
-        // Look for --line-length in extra_args
-        let has_line_length = config
-            .extra_args
-            .iter()
-            .any(|arg| arg.starts_with("--line-length"));
-        if !has_line_length {
-            // Default line length for ruff
-            command.arg("--line-length").arg("88");
-        }
-
-        // Add extra arguments
-        for arg in &config.extra_args {
-            command.arg(arg);
-        }
-
-        // Add the file to fix
-        command.arg(file);
-
-        // Run the command
-        let output = command.output().map_err(|e| ToolError::ExecutionFailed {
-            name: self.name().to_string(),
-            message: format!("Failed to execute ruff: {}", e),
-        })?;
-
-        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-
-        if !output.status.success() {
-            return Err(ToolError::ExecutionFailed {
-                name: self.name().to_string(),
-                message: stderr.clone(),
-            });
-        }
-
-        Ok((stdout, stderr))
-    }
 }
 
 impl LintTool for Ruff {
@@ -345,9 +296,5 @@ impl LintTool for Ruff {
 
     fn version(&self) -> Option<String> {
         utils::get_command_version("ruff", &["--version"])
-    }
-
-    fn priority(&self) -> usize {
-        self.base.priority
     }
 }

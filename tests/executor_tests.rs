@@ -27,7 +27,6 @@ mod test_mocks {
         description: String,
         available: bool,
         version: Option<String>,
-        priority: usize,
     }
 
     impl MockTool {
@@ -39,7 +38,6 @@ mod test_mocks {
             description: &str,
             available: bool,
             version: Option<String>,
-            priority: usize,
         ) -> Arc<Self> {
             Arc::new(Self {
                 name: name.to_string(),
@@ -48,7 +46,6 @@ mod test_mocks {
                 description: description.to_string(),
                 available,
                 version,
-                priority,
             })
         }
     }
@@ -123,10 +120,6 @@ mod test_mocks {
         fn version(&self) -> Option<String> {
             self.version.clone()
         }
-
-        fn priority(&self) -> usize {
-            self.priority
-        }
     }
 }
 
@@ -140,7 +133,6 @@ async fn test_executor_run_tool() {
         "Test tool for testing",
         true,
         Some("1.0.0".to_string()),
-        0,
     );
 
     // Create a registry with the mock tool
@@ -162,7 +154,7 @@ async fn test_executor_run_tool() {
     };
 
     // Run the tool
-    let runner = ToolRunner::new(registry);
+    let runner = ToolRunner::new();
     // Use run_tools with a vector containing just our tool
     let results = runner.run_tools(vec![tool], &files, &config).await;
 
@@ -191,7 +183,6 @@ async fn test_executor_run_tools_for_language() {
         "Rust tool 1",
         true,
         Some("1.0.0".to_string()),
-        0,
     );
     let rust_tool2 = MockTool::new(
         "rust-tool2",
@@ -200,7 +191,6 @@ async fn test_executor_run_tools_for_language() {
         "Rust tool 2",
         true,
         Some("1.0.0".to_string()),
-        0,
     );
     let python_tool = MockTool::new(
         "python-tool",
@@ -209,7 +199,6 @@ async fn test_executor_run_tools_for_language() {
         "Python tool",
         true,
         Some("1.0.0".to_string()),
-        0,
     );
 
     // Create a registry with the mock tools
@@ -233,20 +222,20 @@ async fn test_executor_run_tools_for_language() {
     };
 
     // Create runner
-    let runner = ToolRunner::new(registry);
+    let runner = ToolRunner::new();
 
     // Run tools for Rust language
-    let results = runner
-        .run_tools_for_language(Language::Rust, &rust_files, &config)
-        .await;
+    // Get all the Rust tools from the registry
+    let rust_tools = registry.get_tools_for_language(Language::Rust);
+    let results = runner.run_tools(rust_tools, &rust_files, &config).await;
 
     // Check that we got 2 results (one for each Rust tool)
     assert_eq!(results.len(), 2);
 
     // Run tools for Python language with Rust files
-    let results = runner
-        .run_tools_for_language(Language::Python, &rust_files, &config)
-        .await;
+    // Get all the Python tools from the registry
+    let python_tools = registry.get_tools_for_language(Language::Python);
+    let results = runner.run_tools(python_tools, &rust_files, &config).await;
 
     // Check that we got 1 result (for the Python tool)
     assert_eq!(results.len(), 1);
@@ -262,7 +251,6 @@ async fn test_executor_run_tools_for_language_and_type() {
         "Rust linter",
         true,
         Some("1.0.0".to_string()),
-        0,
     );
     let rust_formatter = MockTool::new(
         "rust-formatter",
@@ -271,7 +259,6 @@ async fn test_executor_run_tools_for_language_and_type() {
         "Rust formatter",
         true,
         Some("1.0.0".to_string()),
-        0,
     );
     let python_linter = MockTool::new(
         "python-linter",
@@ -280,7 +267,6 @@ async fn test_executor_run_tools_for_language_and_type() {
         "Python linter",
         true,
         Some("1.0.0".to_string()),
-        0,
     );
 
     // Create a registry with the mock tools
@@ -303,21 +289,12 @@ async fn test_executor_run_tools_for_language_and_type() {
         check: true,
     };
 
-    // Run formatters for Rust language
-    // We need to create a new registry for each test since we can't access the private registry field
-    let mut formatter_registry = DefaultToolRegistry::new();
-    formatter_registry.register_tool(MockTool::new(
-        "rust-formatter",
-        Language::Rust,
-        ToolType::Formatter,
-        "Rust formatter",
-        true,
-        Some("1.0.0".to_string()),
-        0,
-    ));
-    let formatter_runner = ToolRunner::new(formatter_registry);
+    // Get the Rust formatters from the registry
+    let rust_formatters =
+        registry.get_tools_for_language_and_type(Language::Rust, ToolType::Formatter);
+    let formatter_runner = ToolRunner::new();
     let results = formatter_runner
-        .run_tools_for_language_and_type(Language::Rust, ToolType::Formatter, &rust_files, &config)
+        .run_tools(rust_formatters, &rust_files, &config)
         .await;
 
     // Check that we got 1 result (for the Rust formatter)
@@ -325,21 +302,11 @@ async fn test_executor_run_tools_for_language_and_type() {
     assert!(results[0].is_ok());
     assert_eq!(results[0].as_ref().unwrap().tool_name, "rust-formatter");
 
-    // Run linters for Rust language
-    // Create a new registry for linters
-    let mut linter_registry = DefaultToolRegistry::new();
-    linter_registry.register_tool(MockTool::new(
-        "rust-linter",
-        Language::Rust,
-        ToolType::Linter,
-        "Rust linter",
-        true,
-        Some("1.0.0".to_string()),
-        0,
-    ));
-    let linter_runner = ToolRunner::new(linter_registry);
+    // Get the Rust linters from the registry
+    let rust_linters = registry.get_tools_for_language_and_type(Language::Rust, ToolType::Linter);
+    let linter_runner = ToolRunner::new();
     let results = linter_runner
-        .run_tools_for_language_and_type(Language::Rust, ToolType::Linter, &rust_files, &config)
+        .run_tools(rust_linters, &rust_files, &config)
         .await;
 
     // Check that we got 1 result (for the Rust linter)

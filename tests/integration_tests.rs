@@ -132,7 +132,7 @@ async fn verify_issue_detection(
 
     // Initialize registry with tools
     let registry = DefaultToolRegistry::with_default_tools();
-    let runner = ToolRunner::new(registry);
+    let runner = ToolRunner::new();
 
     // Create a basic tool config
     let config = ToolConfig {
@@ -146,9 +146,8 @@ async fn verify_issue_detection(
     };
 
     // Run appropriate tools for the language
-    let all_results = runner
-        .run_tools_for_language(language, &[file_path.clone()], &config)
-        .await;
+    let tools = registry.get_tools_for_language(language);
+    let all_results = runner.run_tools(tools, &[file_path.clone()], &config).await;
 
     // Print all results for debugging
     for (i, result) in all_results.iter().enumerate() {
@@ -294,7 +293,7 @@ async fn test_python_linting() {
 
     // Initialize registry with tools
     let registry = DefaultToolRegistry::with_default_tools();
-    let runner = ToolRunner::new(registry);
+    let runner = ToolRunner::new();
 
     // Create a basic tool config
     let config = ToolConfig {
@@ -308,9 +307,8 @@ async fn test_python_linting() {
     };
 
     // Run appropriate tools for the language
-    let all_results = runner
-        .run_tools_for_language(Language::Python, &[file_path.clone()], &config)
-        .await;
+    let tools = registry.get_tools_for_language(Language::Python);
+    let all_results = runner.run_tools(tools, &[file_path.clone()], &config).await;
 
     // Print all results for debugging
     for (i, result) in all_results.iter().enumerate() {
