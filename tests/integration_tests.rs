@@ -460,3 +460,146 @@ fn test_cli_check_command() {
         _ => panic!("Expected Check command to be parsed"),
     }
 }
+
+#[tokio::test]
+async fn test_python_file_path_handling() {
+    // Skip if no Python linters are available
+    if !is_tool_available(Language::Python, ToolType::Linter) {
+        println!("Skipping test_python_file_path_handling - no Python linters available");
+        return;
+    }
+
+    // Create two test fixtures with different issues
+    let (_temp_dir1, file_path1) = create_test_fixture(Language::Python, "unused_import");
+    let (_temp_dir2, file_path2) = create_test_fixture(Language::Python, "formatting");
+    
+    println!("Created test fixtures at: {:?} and {:?}", file_path1, file_path2);
+
+    // Initialize registry with tools
+    let registry = DefaultToolRegistry::with_default_tools();
+    let runner = ToolRunner::new();
+
+    // Create a basic tool config
+    let config = ToolConfig {
+        enabled: true,
+        extra_args: Vec::new(),
+        env_vars: HashMap::new(),
+        executable_path: None,
+        report_level: None,
+        auto_fix: false,
+        check: true,
+    };
+
+    // Get Python linters
+    let python_linters: Vec<_> = registry
+        .get_tools_for_language(Language::Python)
+        .into_iter()
+        .filter(|tool| tool.tool_type() == ToolType::Linter)
+        .collect();
+    
+    if python_linters.is_empty() {
+        println!("No Python linters available, skipping test");
+        return;
+    }
+
+    // First, run linters on only the first file
+    println!("Running linters on first file only");
+    let results_file1 = runner
+        .run_tools(python_linters.clone(), &[file_path1.clone()], &config)
+        .await;
+
+    // Then run linters on only the second file
+    println!("Running linters on second file only");
+    let results_file2 = runner
+        .run_tools(python_linters.clone(), &[file_path2.clone()], &config)
+        .await;
+
+    // Finally, run linters on both files
+    println!("Running linters on both files");
+    let results_both = runner
+        .run_tools(python_linters.clone(), &[file_path1.clone(), file_path2.clone()], &config)
+        .await;
+
+    // Verify that issues from file1 only appear when file1 is included
+    for (i, result) in results_file1.iter().enumerate() {
+        if let Ok(lint_result) = result {
+            println!(
+                "File1 only - Result {}: Tool '{}' found {} issues",
+                i,
+                lint_result.tool_name,
+                lint_result.issues.len()
+            );
+
+            // Verify all issues are from file1
+            for issue in &lint_result.issues {
+                if let Some(file) = &issue.file {
+                    assert_eq!(
+                        file.file_name().unwrap(),
+                        file_path1.file_name().unwrap(),
+                        "Issue should only be from file1"
+                    );
+                }
+            }
+        }
+    }
+
+    // Verify that issues from file2 only appear when file2 is included
+    for (i, result) in results_file2.iter().enumerate() {
+        if let Ok(lint_result) = result {
+            println!(
+                "File2 only - Result {}: Tool '{}' found {} issues",
+                i,
+                lint_result.tool_name,
+                lint_result.issues.len()
+            );
+
+            // Verify all issues are from file2
+            for issue in &lint_result.issues {
+                if let Some(file) = &issue.file {
+                    assert_eq!(
+                        file.file_name().unwrap(),
+                        file_path2.file_name().unwrap(),
+                        "Issue should only be from file2"
+                    );
+                }
+            }
+        }
+    }
+
+    // Verify that when both files are included, we get issues from both
+    for (i, result) in results_both.iter().enumerate() {
+        if let Ok(lint_result) = result {
+            println!(
+                "Both files - Result {}: Tool '{}' found {} issues",
+                i,
+                lint_result.tool_name,
+                lint_result.issues.len()
+            );
+
+            // Count issues from each file
+            let mut file1_issues = 0;
+            let mut file2_issues = 0;
+
+            for issue in &lint_result.issues {
+                if let Some(file) = &issue.file {
+                    if file.file_name().unwrap() == file_path1.file_name().unwrap() {
+                        file1_issues += 1;
+                    } else if file.file_name().unwrap() == file_path2.file_name().unwrap() {
+                        file2_issues += 1;
+                    }
+                }
+            }
+
+            // Verify we have issues from both files
+            println!("  File1 issues: {}, File2 issues: {}", file1_issues, file2_issues);
+            
+            // Only assert if the tool found any issues at all
+            if !lint_result.issues.is_empty() {
+                assert!(
+                    file1_issues > 0 && file2_issues > 0,
+                    "Expected issues from both files when both are included"
+                );
+            }
+        }
+    }
+}

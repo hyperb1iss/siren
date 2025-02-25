@@ -12,6 +12,7 @@ use crate::output::terminal;
 use crate::output::OutputFormatter;
 use crate::runner::ToolRunner;
 use crate::tools::{LintTool, ToolRegistry};
+use crate::utils::file_selection;
 use colored::*;
 use log::{debug, warn};
 
@@ -89,51 +90,8 @@ where
         let _total_files: usize = project_info.file_counts.values().sum();
         let _files_by_language = project_info.file_counts.clone();
 
-        // Collect files to check
-        let files_to_check = if git_modified_only {
-            // Get files modified in git
-            let git_files = crate::utils::get_git_modified_files(dir)?;
-
-            // Filter git files to only include those that match our paths
-            if all_paths.len() == 1 && all_paths[0] == PathBuf::from(".") {
-                // If only the current directory is specified, use all git files
-                git_files
-            } else {
-                git_files
-                    .into_iter()
-                    .filter(|file| {
-                        all_paths.iter().any(|path| {
-                            if path.is_dir() {
-                                file.starts_with(path)
-                            } else {
-                                file == path
-                            }
-                        })
-                    })
-                    .collect()
-            }
-        } else {
-            let mut all_files = Vec::new();
-
-            // If only the current directory is specified, scan it
-            if all_paths.len() == 1 && all_paths[0] == PathBuf::from(".") {
-                let dir_files = crate::utils::collect_files_with_gitignore(Path::new("."))?;
-                all_files.extend(dir_files);
-            } else {
-                for path in &all_paths {
-                    if path.is_file() {
-                        // If it's a specific file, just add it directly
-                        all_files.push(path.clone());
-                    } else if path.is_dir() {
-                        // If it's a directory, collect files from it
-                        let dir_files = crate::utils::collect_files_with_gitignore(path)?;
-                        all_files.extend(dir_files);
-                    }
-                }
-            }
-
-            all_files
-        };
+        // Collect files to check using our shared utility
+        let files_to_check = file_selection::collect_files_to_process(&all_paths, git_modified_only)?;
 
         // Debug output for files to check
         if self.verbosity >= Verbosity::Verbose {
@@ -141,7 +99,7 @@ where
             for file in &files_to_check {
                 println!("  - {}", file.display());
             }
-            println!();
+            println!("");
         }
 
         // Get default tool config

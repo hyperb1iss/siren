@@ -5,6 +5,10 @@ use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+// Export file selection utilities
+pub mod file_selection;
+pub use file_selection::*;
+
 /// Check if a command exists in PATH
 pub fn command_exists<S: AsRef<OsStr>>(command: S) -> bool {
     let cmd = command.as_ref();
