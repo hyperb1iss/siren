@@ -7,7 +7,6 @@ use std::sync::{Arc, RwLock};
 use crate::errors::ToolError;
 use crate::models::{Language, LintResult, ToolConfig, ToolType};
 
-mod executor;
 mod python;
 mod registry;
 mod rust;
@@ -17,8 +16,6 @@ mod rust;
 // Re-export Python tools
 
 // Re-export Rust tools
-
-// Re-export executor for public use
 
 /// Trait for lint/format tools
 pub trait LintTool: Send + Sync {
@@ -141,9 +138,6 @@ macro_rules! define_tool_module {
 pub struct DefaultToolRegistry {
     /// Tools by name
     tools: HashMap<String, Arc<dyn LintTool>>,
-
-    /// Verbosity level for debug output
-    verbose: bool,
 }
 
 impl Default for DefaultToolRegistry {
@@ -157,7 +151,6 @@ impl DefaultToolRegistry {
     pub fn new() -> Self {
         Self {
             tools: HashMap::new(),
-            verbose: false,
         }
     }
 
@@ -253,13 +246,6 @@ impl ThreadSafeToolRegistry {
     pub fn new() -> Self {
         Self {
             inner: Arc::new(RwLock::new(DefaultToolRegistry::new())),
-        }
-    }
-
-    /// Create a new thread-safe tool registry with default tools
-    pub fn with_default_tools() -> Self {
-        Self {
-            inner: Arc::new(RwLock::new(DefaultToolRegistry::with_default_tools())),
         }
     }
 }

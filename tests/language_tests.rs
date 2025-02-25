@@ -1,51 +1,36 @@
-use rstest::rstest;
 use std::path::Path;
 
 // We need to make sure we're importing from the crate being tested
 use siren::models::Language;
+use siren::utils;
 
 #[test]
 fn test_language_from_extension() {
     // Test cases for various file extensions
+    assert_eq!(utils::detect_language(Path::new("test.rs")), Language::Rust);
     assert_eq!(
-        Language::from_path(Path::new("test.rs")),
-        Some(Language::Rust)
+        utils::detect_language(Path::new("test.py")),
+        Language::Python
     );
     assert_eq!(
-        Language::from_path(Path::new("test.py")),
-        Some(Language::Python)
+        utils::detect_language(Path::new("test.js")),
+        Language::JavaScript
     );
     assert_eq!(
-        Language::from_path(Path::new("test.js")),
-        Some(Language::JavaScript)
+        utils::detect_language(Path::new("test.ts")),
+        Language::TypeScript
     );
     assert_eq!(
-        Language::from_path(Path::new("test.ts")),
-        Some(Language::TypeScript)
+        utils::detect_language(Path::new("test.html")),
+        Language::Html
     );
+    assert_eq!(utils::detect_language(Path::new("test.css")), Language::Css);
+    assert_eq!(utils::detect_language(Path::new("test.go")), Language::Go);
+    assert_eq!(utils::detect_language(Path::new("test.rb")), Language::Ruby);
+    assert_eq!(utils::detect_language(Path::new("test.php")), Language::Php);
     assert_eq!(
-        Language::from_path(Path::new("test.html")),
-        Some(Language::Html)
-    );
-    assert_eq!(
-        Language::from_path(Path::new("test.css")),
-        Some(Language::Css)
-    );
-    assert_eq!(
-        Language::from_path(Path::new("test.go")),
-        Some(Language::Go)
-    );
-    assert_eq!(
-        Language::from_path(Path::new("test.rb")),
-        Some(Language::Ruby)
-    );
-    assert_eq!(
-        Language::from_path(Path::new("test.php")),
-        Some(Language::Php)
-    );
-    assert_eq!(
-        Language::from_path(Path::new("test.java")),
-        Some(Language::Java)
+        utils::detect_language(Path::new("test.java")),
+        Language::Java
     );
 }
 
@@ -53,33 +38,41 @@ fn test_language_from_extension() {
 fn test_language_from_filename() {
     // Test special filenames without extensions
     assert_eq!(
-        Language::from_path(Path::new("Dockerfile")),
-        Some(Language::Docker)
+        utils::detect_language(Path::new("Dockerfile")),
+        Language::Docker
     );
     assert_eq!(
-        Language::from_path(Path::new("Makefile")),
-        Some(Language::Makefile)
+        utils::detect_language(Path::new("Makefile")),
+        Language::Makefile
     );
 
     // Test with path components
     assert_eq!(
-        Language::from_path(Path::new("/path/to/Dockerfile")),
-        Some(Language::Docker)
+        utils::detect_language(Path::new("/path/to/Dockerfile")),
+        Language::Docker
     );
     assert_eq!(
-        Language::from_path(Path::new("src/Makefile")),
-        Some(Language::Makefile)
+        utils::detect_language(Path::new("src/Makefile")),
+        Language::Makefile
     );
 }
 
 #[test]
 fn test_language_from_unknown_extension() {
     // Test with unknown extensions
-    assert_eq!(Language::from_path(Path::new("test.unknown")), None);
-    assert_eq!(Language::from_path(Path::new("test")), None);
-    assert_eq!(Language::from_path(Path::new("")), None);
+    assert_eq!(
+        utils::detect_language(Path::new("test.unknown")),
+        Language::Unknown
+    );
+    assert_eq!(utils::detect_language(Path::new("test")), Language::Unknown);
+    assert_eq!(utils::detect_language(Path::new("")), Language::Unknown);
 }
 
+// The following tests are commented out because the methods they test have been removed
+// in the refactor. If you need this functionality, you'll need to implement these methods
+// or update the tests to use the new architecture.
+
+/*
 #[rstest]
 #[case(Language::Rust, &["rs"])]
 #[case(Language::Python, &["py", "pyi", "pyx"])]
@@ -97,3 +90,4 @@ fn test_language_extensions(#[case] language: Language, #[case] expected_extensi
 fn test_language_emoji(#[case] language: Language, #[case] expected_emoji: &str) {
     assert_eq!(language.emoji(), expected_emoji);
 }
+*/

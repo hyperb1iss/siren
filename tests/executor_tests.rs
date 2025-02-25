@@ -317,7 +317,7 @@ async fn test_executor_run_tools_for_language_and_type() {
     ));
     let formatter_runner = ToolRunner::new(formatter_registry);
     let results = formatter_runner
-        .run_tools_for_language(Language::Rust, &rust_files, &config)
+        .run_tools_for_language_and_type(Language::Rust, ToolType::Formatter, &rust_files, &config)
         .await;
 
     // Check that we got 1 result (for the Rust formatter)
@@ -339,7 +339,7 @@ async fn test_executor_run_tools_for_language_and_type() {
     ));
     let linter_runner = ToolRunner::new(linter_registry);
     let results = linter_runner
-        .run_tools_for_language(Language::Rust, &rust_files, &config)
+        .run_tools_for_language_and_type(Language::Rust, ToolType::Linter, &rust_files, &config)
         .await;
 
     // Check that we got 1 result (for the Rust linter)

@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use crate::cli::{FormatArgs, Verbosity};
+use crate::cli::FormatArgs;
 use crate::config::{SirenConfig, ToolConfig as ConfigToolConfig};
 use crate::detection::ProjectDetector;
 use crate::errors::SirenError;
@@ -18,9 +18,8 @@ where
     O: OutputFormatter + Clone,
 {
     detector: D,
-    tool_registry: R,
+    registry: R,
     output_formatter: O,
-    verbosity: Verbosity,
 }
 
 impl<D, R, O> FormatCommand<D, R, O>
@@ -30,12 +29,11 @@ where
     O: OutputFormatter + Clone,
 {
     /// Create a new format command handler
-    pub fn new(detector: D, tool_registry: R, output_formatter: O, verbosity: Verbosity) -> Self {
+    pub fn new(detector: D, registry: R, output_formatter: O) -> Self {
         Self {
             detector,
-            tool_registry,
+            registry,
             output_formatter,
-            verbosity,
         }
     }
 
@@ -99,7 +97,7 @@ where
         for language in &project_info.languages {
             println!("  Looking for formatters for {:?}...", language);
             let language_formatters = self
-                .tool_registry
+                .registry
                 .get_tools_for_language_and_type(*language, ToolType::Formatter);
 
             println!(
@@ -126,7 +124,7 @@ where
 
             // Print all available tools to help debug
             for language in &project_info.languages {
-                let all_tools = self.tool_registry.get_tools_for_language(*language);
+                let all_tools = self.registry.get_tools_for_language(*language);
                 println!("  Tools for {:?}:", language);
                 for tool in all_tools {
                     println!(
@@ -182,7 +180,7 @@ where
         let default_tool_config = ConfigToolConfig::default();
 
         // Create a tool runner
-        let tool_runner = ToolRunner::new(self.tool_registry.clone());
+        let tool_runner = ToolRunner::new(self.registry.clone());
 
         // Prepare all available formatters
         let available_formatters: Vec<_> = formatters

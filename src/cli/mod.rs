@@ -3,8 +3,6 @@
 use clap::{Args, Parser, Subcommand};
 use std::path::PathBuf;
 
-mod output;
-
 /// Verbosity level for output
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd)]
 pub enum Verbosity {

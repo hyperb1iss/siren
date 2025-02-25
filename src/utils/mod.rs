@@ -71,54 +71,7 @@ pub fn get_git_modified_files(dir: &Path) -> Result<Vec<PathBuf>, std::io::Error
     Ok(files)
 }
 
-/// Filter files by extension
-pub fn filter_files_by_extension(files: &[PathBuf], extensions: &[&str]) -> Vec<PathBuf> {
-    files
-        .iter()
-        .filter(|path| {
-            if let Some(ext) = path.extension() {
-                let ext_str = ext.to_string_lossy().to_lowercase();
-                extensions.contains(&ext_str.as_str())
-            } else {
-                false
-            }
-        })
-        .cloned()
-        .collect()
-}
-
-/// Convert absolute path to relative path
-pub fn to_relative_path(path: &Path, base_dir: &Path) -> PathBuf {
-    pathdiff::diff_paths(path, base_dir).unwrap_or_else(|| path.to_path_buf())
-}
-
-/// Find a file in a directory or its parents
-pub fn find_file(dir: &Path, filename: &str) -> Option<PathBuf> {
-    let mut current = Some(dir);
-
-    while let Some(dir) = current {
-        let file_path = dir.join(filename);
-
-        if file_path.exists() && file_path.is_file() {
-            return Some(file_path);
-        }
-
-        current = dir.parent();
-    }
-
-    None
-}
-
-/// Pluralize a word based on count
-pub fn pluralize(count: usize, singular: &str, plural: &str) -> String {
-    if count == 1 {
-        format!("{} {}", count, singular)
-    } else {
-        format!("{} {}", count, plural)
-    }
-}
-
-/// Detect the language of a file based on its extension
+/// Detect language from file extension
 pub fn detect_language(file_path: &Path) -> crate::models::Language {
     use crate::models::Language;
 

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use crate::cli::{FixArgs, FormatArgs, Verbosity};
+use crate::cli::{FixArgs, FormatArgs};
 use crate::config::{SirenConfig, ToolConfig as ConfigToolConfig};
 use crate::detection::ProjectDetector;
 use crate::errors::SirenError;
@@ -21,7 +21,6 @@ where
     detector: D,
     tool_registry: R,
     output_formatter: O,
-    verbosity: Verbosity,
 }
 
 impl<D, R, O> FixCommand<D, R, O>
@@ -31,12 +30,11 @@ where
     O: OutputFormatter + Clone,
 {
     /// Create a new fix command handler
-    pub fn new(detector: D, tool_registry: R, output_formatter: O, verbosity: Verbosity) -> Self {
+    pub fn new(detector: D, tool_registry: R, output_formatter: O) -> Self {
         Self {
             detector,
             tool_registry,
             output_formatter,
-            verbosity,
         }
     }
 
@@ -50,16 +48,13 @@ where
     ) -> Result<(), SirenError> {
         // First run the format command if requested
         if args.format {
-            if self.verbosity >= Verbosity::Normal {
-                println!("💅 Running format before fix...");
-            }
+            println!("💅 Running format before fix...");
 
-            // Create a FormatCommand instance
+            // Create and run a format command first
             let format_command = crate::commands::FormatCommand::new(
                 self.detector.clone(),
                 self.tool_registry.clone(),
                 self.output_formatter.clone(),
-                self.verbosity,
             );
 
             // Create FormatArgs without the check option

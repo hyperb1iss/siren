@@ -5,8 +5,6 @@ use crate::models::{DetectedTool, Framework, Language, ProjectInfo};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-mod framework_detection;
-mod language_detection;
 mod tool_detection;
 
 /// Trait for detecting project information
@@ -39,11 +37,6 @@ impl DefaultProjectDetector {
     /// Create a new DefaultProjectDetector
     pub fn new() -> Self {
         Self { max_depth: 5 }
-    }
-
-    /// Create a new DefaultProjectDetector with a custom max depth
-    pub fn with_max_depth(max_depth: usize) -> Self {
-        Self { max_depth }
     }
 
     /// Detect language based on file extension

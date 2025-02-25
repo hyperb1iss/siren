@@ -35,7 +35,7 @@ impl PyLint {
         let mut issues = Vec::new();
 
         // Track current module and file for module-level patterns
-        let mut current_module: Option<String> = None;
+        let mut _current_module: Option<String> = None;
 
         // Pattern for module headers
         let module_regex = Regex::new(r"(?m)^\*+\s+Module\s+(\w+)").unwrap();
@@ -54,7 +54,7 @@ impl PyLint {
 
             // Check for module header
             if let Some(cap) = module_regex.captures(line) {
-                current_module = Some(cap[1].to_string());
+                _current_module = Some(cap[1].to_string());
                 continue;
             }
 

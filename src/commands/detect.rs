@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use crate::cli::{DetectArgs, Verbosity};
+use crate::cli::DetectArgs;
 use crate::detection::ProjectDetector;
 use crate::errors::SirenError;
 use crate::output::OutputFormatter;
@@ -13,7 +13,6 @@ where
 {
     detector: D,
     output_formatter: O,
-    verbosity: Verbosity,
 }
 
 impl<D, O> DetectCommand<D, O>
@@ -22,11 +21,10 @@ where
     O: OutputFormatter + Clone,
 {
     /// Create a new detect command handler
-    pub fn new(detector: D, output_formatter: O, verbosity: Verbosity) -> Self {
+    pub fn new(detector: D, output_formatter: O) -> Self {
         Self {
             detector,
             output_formatter,
-            verbosity,
         }
     }
 

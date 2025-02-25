@@ -79,25 +79,3 @@ pub enum IssueSeverity {
     /// Style suggestions
     Style,
 }
-
-impl IssueSeverity {
-    /// Get the emoji representation of this severity
-    pub fn emoji(&self) -> &'static str {
-        match self {
-            IssueSeverity::Error => "❌",
-            IssueSeverity::Warning => "⚠️",
-            IssueSeverity::Info => "ℹ️",
-            IssueSeverity::Style => "💄",
-        }
-    }
-
-    /// Get the color name for this severity
-    pub fn color_name(&self) -> &'static str {
-        match self {
-            IssueSeverity::Error => "red",
-            IssueSeverity::Warning => "yellow",
-            IssueSeverity::Info => "blue",
-            IssueSeverity::Style => "magenta",
-        }
-    }
-}
