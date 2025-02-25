@@ -85,6 +85,9 @@ pub struct ToolConfig {
 
     /// Configuration file to use
     pub config_file: Option<PathBuf>,
+
+    /// Whether to automatically fix issues
+    pub auto_fix: Option<bool>,
 }
 
 impl Default for ToolConfig {
@@ -93,6 +96,7 @@ impl Default for ToolConfig {
             enabled: true,
             extra_args: None,
             config_file: None,
+            auto_fix: None,
         }
     }
 }
@@ -118,7 +122,7 @@ impl Default for OutputConfig {
         Self {
             show_line_numbers: true,
             show_file_paths: true,
-            max_issues_per_category: 10,
+            max_issues_per_category: usize::MAX,
             show_code_snippets: true,
         }
     }

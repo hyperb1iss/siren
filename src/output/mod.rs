@@ -20,8 +20,8 @@ pub struct PrettyFormatter {
     /// Whether to use emojis
     use_emoji: bool,
 
-    /// Whether to use colors
-    use_colors: bool,
+    /// Whether to use colors (kept for future use)
+    _use_colors: bool,
 }
 
 impl PrettyFormatter {
@@ -29,15 +29,15 @@ impl PrettyFormatter {
     pub fn new() -> Self {
         Self {
             use_emoji: true,
-            use_colors: true,
+            _use_colors: true,
         }
     }
 
-    /// Create a new PrettyFormatter with custom settings
-    pub fn with_options(use_emoji: bool, use_colors: bool) -> Self {
+    /// Create a new PrettyFormatter with custom settings (kept for future use)
+    fn _with_options(use_emoji: bool, use_colors: bool) -> Self {
         Self {
             use_emoji,
-            use_colors,
+            _use_colors: use_colors,
         }
     }
 }
@@ -53,10 +53,7 @@ impl OutputFormatter for PrettyFormatter {
             output.push_str("Siren detected the following in your project:\n");
         }
 
-        // Box top
-        output.push_str("┌─────────────────────────────────────────────┐\n");
-
-        // Languages
+        // Languages - no box borders, more compact format
         for lang in &project_info.languages {
             let file_count = project_info.file_counts.get(lang).unwrap_or(&0);
 
@@ -89,14 +86,13 @@ impl OutputFormatter for PrettyFormatter {
 
             let file_emoji = if self.use_emoji { "📂 " } else { "" };
 
-            // Format line
+            // Format line - without box borders
             output.push_str(&format!(
-                "│ {}{:<10} │ {}{} files{:<4} │",
+                "{}{:<10} │ {}{} files    ",
                 lang_emoji,
                 format!("{:?}", lang),
                 file_emoji,
-                file_count,
-                ""
+                file_count
             ));
 
             // Add detected tools for this language
@@ -109,14 +105,11 @@ impl OutputFormatter for PrettyFormatter {
             if !tools.is_empty() {
                 let tool_emoji = if self.use_emoji { "🔧 " } else { "" };
                 let tool_names: Vec<_> = tools.iter().map(|t| t.name.as_str()).collect();
-                output.push_str(&format!(" {}{:<8} │\n", tool_emoji, tool_names.join(", ")));
+                output.push_str(&format!("│ {}{}\n", tool_emoji, tool_names.join(", ")));
             } else {
-                output.push_str(" │\n");
+                output.push_str("\n");
             }
         }
-
-        // Box bottom
-        output.push_str("└─────────────────────────────────────────────┘\n");
 
         // Framework info
         if !project_info.frameworks.is_empty() {
@@ -139,150 +132,113 @@ impl OutputFormatter for PrettyFormatter {
     fn format_results(&self, results: &[LintResult], config: &OutputConfig) -> String {
         let mut output = String::new();
 
-        // Group results by language
-        let mut by_lang: std::collections::HashMap<crate::models::Language, Vec<&LintResult>> =
-            std::collections::HashMap::new();
+        // Group results by file path
+        let mut by_file: std::collections::HashMap<
+            String,
+            Vec<(&LintResult, &crate::models::LintIssue)>,
+        > = std::collections::HashMap::new();
 
+        // First, collect all issues with their file paths
         for result in results {
-            if let Some(tool) = &result.tool {
-                by_lang.entry(tool.language).or_default().push(result);
+            for issue in &result.issues {
+                if let Some(file) = &issue.file {
+                    // Get filename for grouping
+                    let file_key = if config.show_file_paths {
+                        file.display().to_string()
+                    } else {
+                        file.file_name()
+                            .map(|f| f.to_string_lossy().to_string())
+                            .unwrap_or_else(|| "unknown".to_string())
+                    };
+
+                    // Add to file group
+                    by_file.entry(file_key).or_default().push((result, issue));
+                } else {
+                    // For issues without files, group under tool name
+                    by_file
+                        .entry(format!("[{}]", result.tool_name))
+                        .or_default()
+                        .push((result, issue));
+                }
             }
         }
 
-        // Format results for each language
-        for (lang, lang_results) in by_lang {
-            // Language header
-            let lang_emoji = if self.use_emoji {
-                match lang {
-                    crate::models::Language::Rust => "🦀 ",
-                    crate::models::Language::Python => "🐍 ",
-                    crate::models::Language::JavaScript => "🌐 ",
-                    crate::models::Language::TypeScript => "📘 ",
-                    _ => "📄 ",
-                }
-            } else {
-                ""
-            };
+        // If there are no issues, just return empty string
+        if by_file.is_empty() {
+            return output;
+        }
 
-            output.push_str(&format!("\n{}{:?}:\n", lang_emoji, lang));
+        // Sort files for consistent output
+        let mut file_keys: Vec<_> = by_file.keys().collect();
+        file_keys.sort();
 
-            // Format results for each tool
-            for result in lang_results {
-                let tool_name = result
-                    .tool
-                    .as_ref()
-                    .map(|t| t.name.as_str())
-                    .unwrap_or("Unknown");
+        for file_key in file_keys {
+            let issues = &by_file[file_key];
 
-                // Status icon
-                let status_icon = if self.use_emoji {
-                    if result.success {
-                        "✓ "
-                    } else if result.issues.is_empty() {
-                        "⚠️ "
+            // Skip empty issue lists
+            if issues.is_empty() {
+                continue;
+            }
+
+            // File header
+            output.push_str(&format!("\n📄 {}:\n", file_key));
+
+            // Sort issues by line number
+            let mut sorted_issues = issues.clone();
+            sorted_issues.sort_by_key(|(_, issue)| issue.line.unwrap_or(0));
+
+            // Track previous line to avoid duplicates
+            let mut prev_line: Option<usize> = None;
+
+            for (result, issue) in sorted_issues {
+                // Format issue line
+                let line_info = if let Some(line) = issue.line {
+                    // If we're showing the same line again, use a different prefix
+                    if prev_line == Some(line) {
+                        format!("      ")
                     } else {
-                        "❌ "
+                        prev_line = Some(line);
+                        format!("L{:<4}", line)
                     }
                 } else {
-                    if result.success {
-                        "[OK] "
-                    } else if result.issues.is_empty() {
-                        "[WARN] "
-                    } else {
-                        "[FAIL] "
-                    }
+                    format!("     ")
                 };
 
-                // Tool result summary
-                if result.issues.is_empty() {
-                    output.push_str(&format!(
-                        "  {} {} ({}): All good!\n",
-                        status_icon,
-                        tool_name,
-                        result
-                            .tool
-                            .as_ref()
-                            .map(|t| format!("{:?}", t.tool_type))
-                            .unwrap_or_default()
-                    ));
+                let severity_icon = if self.use_emoji {
+                    match issue.severity {
+                        crate::models::IssueSeverity::Error => "🔴 ",
+                        crate::models::IssueSeverity::Warning => "🟠 ",
+                        crate::models::IssueSeverity::Info => "🔵 ",
+                        crate::models::IssueSeverity::Style => "💜 ",
+                    }
                 } else {
+                    ""
+                };
+
+                // Tool name for reference
+                let tool_name = result.tool_name.as_str();
+
+                output.push_str(&format!(
+                    "  {} {} [{}]: {}\n",
+                    line_info, severity_icon, tool_name, issue.message
+                ));
+
+                // Show code snippet if available and enabled
+                if config.show_code_snippets && issue.code.is_some() {
+                    // Use simple indentation
+                    let formatted_code = issue
+                        .code
+                        .as_ref()
+                        .unwrap()
+                        .lines()
+                        .map(|line| format!("       │ {}", line))
+                        .collect::<Vec<_>>()
+                        .join("\n");
+
                     output.push_str(&format!(
-                        "  {} {} ({}): {} issues found\n",
-                        status_icon,
-                        tool_name,
-                        result
-                            .tool
-                            .as_ref()
-                            .map(|t| format!("{:?}", t.tool_type))
-                            .unwrap_or_default(),
-                        result.issues.len()
+                        "       ┌───────────────────\n{}\n       └───────────────────\n",
+                        formatted_code
                     ));
-
-                    // Show issues (limited by config)
-                    let issues_to_show =
-                        std::cmp::min(result.issues.len(), config.max_issues_per_category);
-
-                    for (_i, issue) in result.issues.iter().take(issues_to_show).enumerate() {
-                        // Format issue line
-                        let location = if let (Some(file), Some(line)) = (&issue.file, &issue.line)
-                        {
-                            if config.show_file_paths {
-                                format!("{}", file.display())
-                            } else {
-                                let file_name = file
-                                    .file_name()
-                                    .map(|f| f.to_string_lossy().to_string())
-                                    .unwrap_or_default();
-
-                                if config.show_line_numbers {
-                                    format!("{}:{}", file_name, line)
-                                } else {
-                                    file_name
-                                }
-                            }
-                        } else {
-                            String::new()
-                        };
-
-                        let severity_icon = if self.use_emoji {
-                            match issue.severity {
-                                crate::models::IssueSeverity::Error => "🔴 ",
-                                crate::models::IssueSeverity::Warning => "🟠 ",
-                                crate::models::IssueSeverity::Info => "🔵 ",
-                                crate::models::IssueSeverity::Style => "💜 ",
-                            }
-                        } else {
-                            ""
-                        };
-
-                        output.push_str(&format!(
-                            "    └─ {}{}: {}\n",
-                            severity_icon,
-                            if location.is_empty() {
-                                String::new()
-                            } else {
-                                format!("{} - ", location)
-                            },
-                            issue.message
-                        ));
-
-                        // Show code snippet if available and enabled
-                        if config.show_code_snippets && issue.code.is_some() {
-                            output.push_str(&format!(
-                                "       ```\n       {}\n       ```\n",
-                                issue.code.as_ref().unwrap()
-                            ));
-                        }
-                    }
-
-                    // Indicate if there are more issues
-                    if result.issues.len() > issues_to_show {
-                        output.push_str(&format!(
-                            "    └─ [Showing {}/{} issues, use --verbose for all]\n",
-                            issues_to_show,
-                            result.issues.len()
-                        ));
-                    }
                 }
             }
         }
@@ -294,14 +250,41 @@ impl OutputFormatter for PrettyFormatter {
         // Count errors and warnings
         let mut error_count = 0;
         let mut warning_count = 0;
+        let mut style_count = 0;
+        let mut info_count = 0;
+        let mut total_issues = 0;
+
+        // Count issues by tool
+        let mut tool_issues = std::collections::HashMap::new();
+
+        // Count files with issues
+        let mut unique_files = std::collections::HashSet::new();
 
         for result in results {
             for issue in &result.issues {
                 match issue.severity {
                     crate::models::IssueSeverity::Error => error_count += 1,
                     crate::models::IssueSeverity::Warning => warning_count += 1,
-                    _ => {}
+                    crate::models::IssueSeverity::Style => style_count += 1,
+                    crate::models::IssueSeverity::Info => info_count += 1,
                 }
+                total_issues += 1;
+
+                // Track unique files with issues
+                if let Some(file) = &issue.file {
+                    unique_files.insert(file.clone());
+                }
+            }
+
+            // Count issues by tool
+            let tool_name = &result.tool_name;
+            let issue_count = result.issues.len();
+
+            if issue_count > 0 {
+                tool_issues
+                    .entry(tool_name.clone())
+                    .and_modify(|count| *count += issue_count)
+                    .or_insert(issue_count);
             }
         }
 
@@ -324,10 +307,29 @@ impl OutputFormatter for PrettyFormatter {
             }
         };
 
-        format!(
+        let mut output = format!(
             "{} Summary: {} errors, {} warnings",
             status_icon, error_count, warning_count
-        )
+        );
+
+        // Add style and info counts if present
+        if style_count > 0 || info_count > 0 {
+            output.push_str(&format!(
+                "\nTotal: {} issues found in {} files",
+                total_issues,
+                unique_files.len()
+            ));
+
+            // Add per-tool breakdown if we have multiple tools with issues
+            if tool_issues.len() > 1 {
+                output.push_str("\n\nBreakdown by tool:");
+                for (tool, count) in tool_issues.iter() {
+                    output.push_str(&format!("\n  {}: {} issues", tool, count));
+                }
+            }
+        }
+
+        output
     }
 }
 
@@ -335,7 +337,8 @@ impl OutputFormatter for PrettyFormatter {
 pub struct JsonFormatter;
 
 impl JsonFormatter {
-    pub fn new() -> Self {
+    /// Create a new JsonFormatter (kept for future use)
+    fn _new() -> Self {
         Self
     }
 }

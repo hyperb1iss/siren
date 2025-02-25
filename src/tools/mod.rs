@@ -8,6 +8,7 @@ use crate::errors::ToolError;
 use crate::models::{Language, LintResult, ToolConfig, ToolType};
 
 mod executor;
+mod python;
 mod registry;
 mod rust;
 

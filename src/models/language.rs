@@ -80,6 +80,9 @@ pub enum Language {
 
     /// TOML data format
     Toml,
+
+    /// Unknown language
+    Unknown,
 }
 
 impl Language {
@@ -106,6 +109,7 @@ impl Language {
             Language::Json => &["json"],
             Language::Yaml => &["yml", "yaml"],
             Language::Toml => &["toml"],
+            Language::Unknown => &[],
         }
     }
 
@@ -158,6 +162,7 @@ impl Language {
             Language::Json => "📋",
             Language::Yaml => "📄",
             Language::Toml => "📁",
+            Language::Unknown => "❓",
         }
     }
 }

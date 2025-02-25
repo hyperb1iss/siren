@@ -9,6 +9,25 @@ pub fn command_exists<S: AsRef<OsStr>>(command: S) -> bool {
     which::which(command).is_ok()
 }
 
+/// Check if a command is available in PATH (alias for command_exists)
+pub fn is_command_available<S: AsRef<OsStr>>(command: S) -> bool {
+    command_exists(command)
+}
+
+/// Get the version of a command
+pub fn get_command_version<S: AsRef<OsStr>>(command: S, args: &[&str]) -> Option<String> {
+    let output = Command::new(command).args(args).output().ok()?;
+
+    if output.status.success() {
+        let version_output = String::from_utf8_lossy(&output.stdout).to_string();
+        // Try to extract version from the first line
+        let first_line = version_output.lines().next()?;
+        Some(first_line.trim().to_string())
+    } else {
+        None
+    }
+}
+
 /// Check if a directory is a git repository
 pub fn is_git_repo(dir: &Path) -> bool {
     let git_dir = dir.join(".git");
@@ -90,5 +109,45 @@ pub fn pluralize(count: usize, singular: &str, plural: &str) -> String {
         format!("{} {}", count, singular)
     } else {
         format!("{} {}", count, plural)
+    }
+}
+
+/// Detect the language of a file based on its extension
+pub fn detect_language(file_path: &Path) -> crate::models::Language {
+    use crate::models::Language;
+
+    if let Some(extension) = file_path.extension() {
+        let ext = extension.to_string_lossy().to_lowercase();
+        match ext.as_str() {
+            "rs" => Language::Rust,
+            "py" | "pyi" => Language::Python,
+            "js" | "jsx" | "mjs" => Language::JavaScript,
+            "ts" | "tsx" => Language::TypeScript,
+            "html" | "htm" => Language::Html,
+            "css" => Language::Css,
+            "go" => Language::Go,
+            "rb" => Language::Ruby,
+            "java" => Language::Java,
+            "php" => Language::Php,
+            "c" => Language::C,
+            "cpp" | "cc" | "cxx" | "h" | "hpp" => Language::Cpp,
+            "cs" => Language::CSharp,
+            "swift" => Language::Swift,
+            "md" | "markdown" => Language::Markdown,
+            "json" => Language::Json,
+            "yml" | "yaml" => Language::Yaml,
+            "toml" => Language::Toml,
+            _ => Language::Unknown,
+        }
+    } else {
+        // Handle special files without extensions
+        let filename = file_path
+            .file_name()
+            .map(|f| f.to_string_lossy().to_lowercase());
+        match filename.as_deref() {
+            Some("makefile") => Language::Makefile,
+            Some("dockerfile") => Language::Docker,
+            _ => Language::Unknown,
+        }
     }
 }

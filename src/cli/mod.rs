@@ -141,6 +141,10 @@ pub struct CheckArgs {
     /// Output format
     #[arg(long, default_value = "pretty")]
     pub format: String,
+
+    /// Automatically fix issues when possible
+    #[arg(short, long)]
+    pub auto_fix: bool,
 }
 
 /// Arguments for the format command
@@ -229,9 +233,4 @@ pub struct SuggestArgs {
     /// Maximum number of suggestions to show
     #[arg(short, long, default_value = "5")]
     pub max_suggestions: usize,
-}
-
-/// Parse command-line arguments
-pub fn parse_args() -> Cli {
-    Cli::parse()
 }

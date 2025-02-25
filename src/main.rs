@@ -15,6 +15,9 @@ use errors::SirenError;
 
 #[tokio::main]
 async fn main() -> Result<(), SirenError> {
+    // This variable should be flagged by clippy as unused
+    let unused_var = "This is unused";
+
     // Initialize logger
     env_logger::init();
 
@@ -49,6 +52,7 @@ async fn main() -> Result<(), SirenError> {
         tools: None,
         tool_types: None,
         format: "pretty".to_string(),
+        auto_fix: false,
     })) {
         Commands::Check(args) => {
             app.check(args, cli.paths, cli.git_modified).await?;

@@ -1,8 +1,8 @@
-//! Rustfmt formatter for Rust
+//! Black formatter for Python
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use crate::errors::ToolError;
 use crate::models::tools::ToolConfig as ModelsToolConfig;
@@ -10,37 +10,44 @@ use crate::models::{IssueSeverity, Language, LintIssue, LintResult, ToolInfo, To
 use crate::tools::{LintTool, ToolBase};
 use crate::utils;
 
-/// Rustfmt formatter for Rust
-pub struct Rustfmt {
+/// Black formatter for Python
+pub struct Black {
     base: ToolBase,
 }
 
-impl Rustfmt {
-    /// Create a new Rustfmt formatter
+impl Black {
+    /// Create a new Black formatter
     pub fn new() -> Self {
         Self {
             base: ToolBase {
-                name: "rustfmt".to_string(),
-                description: "The Rust code formatter".to_string(),
+                name: "black".to_string(),
+                description: "The uncompromising Python code formatter".to_string(),
                 tool_type: ToolType::Formatter,
-                language: Language::Rust,
+                language: Language::Python,
                 priority: 10,
             },
         }
     }
 
-    /// Run rustfmt on a file to check if it needs formatting
+    /// Run black on a file to check if it needs formatting
     fn check_file(
         &self,
         file: &Path,
         config: &ModelsToolConfig,
     ) -> Result<Vec<LintIssue>, ToolError> {
-        let mut command = Command::new("rustfmt");
+        let mut command = Command::new("black");
         command.arg("--check");
+        command.arg("--quiet");
 
-        // Add custom config file if specified
-        if let Some(config_file) = &config.executable_path {
-            command.arg("--config-path").arg(config_file);
+        // Add line length if specified in extra args
+        // Look for --line-length in extra_args
+        let has_line_length = config
+            .extra_args
+            .iter()
+            .any(|arg| arg.starts_with("--line-length"));
+        if !has_line_length {
+            // Default line length for black
+            command.arg("--line-length").arg("88");
         }
 
         // Add extra arguments
@@ -54,7 +61,7 @@ impl Rustfmt {
         // Run the command
         let output = command.output().map_err(|e| ToolError::ExecutionFailed {
             name: self.name().to_string(),
-            message: format!("Failed to execute rustfmt: {}", e),
+            message: format!("Failed to execute black: {}", e),
         })?;
 
         // Parse the output
@@ -75,13 +82,20 @@ impl Rustfmt {
         }
     }
 
-    /// Fix formatting issues with rustfmt
-    fn _fix_file(&self, file: &Path, config: &ModelsToolConfig) -> Result<(), ToolError> {
-        let mut command = Command::new("rustfmt");
+    /// Fix formatting issues with black
+    fn fix_file(&self, file: &Path, config: &ModelsToolConfig) -> Result<(), ToolError> {
+        let mut command = Command::new("black");
+        command.arg("--quiet");
 
-        // Add custom config file if specified
-        if let Some(config_file) = &config.executable_path {
-            command.arg("--config-path").arg(config_file);
+        // Add line length if specified in extra args
+        // Look for --line-length in extra_args
+        let has_line_length = config
+            .extra_args
+            .iter()
+            .any(|arg| arg.starts_with("--line-length"));
+        if !has_line_length {
+            // Default line length for black
+            command.arg("--line-length").arg("88");
         }
 
         // Add extra arguments
@@ -95,14 +109,12 @@ impl Rustfmt {
         // Run the command
         let output = command.output().map_err(|e| ToolError::ExecutionFailed {
             name: self.name().to_string(),
-            message: format!("Failed to execute rustfmt: {}", e),
+            message: format!("Failed to execute black: {}", e),
         })?;
 
-        // Check result
         if !output.status.success() {
-            return Err(ToolError::ToolFailed {
+            return Err(ToolError::ExecutionFailed {
                 name: self.name().to_string(),
-                code: output.status.code().unwrap_or(1),
                 message: String::from_utf8_lossy(&output.stderr).to_string(),
             });
         }
@@ -111,14 +123,14 @@ impl Rustfmt {
     }
 }
 
-impl LintTool for Rustfmt {
+impl LintTool for Black {
     fn name(&self) -> &str {
         &self.base.name
     }
 
     fn can_handle(&self, file_path: &Path) -> bool {
         if let Some(ext) = file_path.extension() {
-            ext == "rs"
+            ext == "py" || ext == "pyi" || ext == "pyx"
         } else {
             false
         }
@@ -129,58 +141,37 @@ impl LintTool for Rustfmt {
         files: &[PathBuf],
         config: &ModelsToolConfig,
     ) -> Result<LintResult, ToolError> {
-        // Skip if not enabled
-        if !config.enabled {
-            return Ok(LintResult {
-                tool_name: self.name().to_string(),
-                tool: Some(ToolInfo {
-                    name: self.name().to_string(),
-                    tool_type: self.tool_type(),
-                    language: self.language(),
-                    available: self.is_available(),
-                    version: self.version(),
-                    description: self.description().to_string(),
-                }),
-                success: true,
-                issues: Vec::new(),
-                execution_time: Duration::from_secs(0),
-                stdout: None,
-                stderr: None,
-            });
-        }
+        let start = Instant::now();
+        let mut issues = Vec::new();
 
-        // Check if rustfmt is available
-        if !self.is_available() {
-            return Err(ToolError::NotFound(self.name().to_string()));
-        }
-
-        let start_time = Instant::now();
-        let mut all_issues = Vec::new();
-        let mut success = true;
+        // Check if we should fix issues
+        let fix_mode = config.auto_fix;
 
         // Process each file
         for file in files {
-            // Skip files we can't handle
             if !self.can_handle(file) {
                 continue;
             }
 
-            // Check if file needs formatting
-            match self.check_file(file, config) {
-                Ok(issues) => {
-                    if !issues.is_empty() {
-                        success = false;
-                        all_issues.extend(issues);
-                    }
-                }
-                Err(e) => {
+            if fix_mode {
+                // Fix the file
+                if let Err(e) = self.fix_file(file, config) {
                     return Err(e);
+                }
+            } else {
+                // Check the file
+                match self.check_file(file, config) {
+                    Ok(file_issues) => {
+                        issues.extend(file_issues);
+                    }
+                    Err(e) => {
+                        return Err(e);
+                    }
                 }
             }
         }
 
-        // Measure execution time
-        let execution_time = start_time.elapsed();
+        let execution_time = start.elapsed();
 
         Ok(LintResult {
             tool_name: self.name().to_string(),
@@ -192,8 +183,8 @@ impl LintTool for Rustfmt {
                 version: self.version(),
                 description: self.description().to_string(),
             }),
-            success,
-            issues: all_issues,
+            success: issues.is_empty(),
+            issues,
             execution_time,
             stdout: None,
             stderr: None,
@@ -213,20 +204,14 @@ impl LintTool for Rustfmt {
     }
 
     fn is_available(&self) -> bool {
-        utils::command_exists("rustfmt")
+        utils::is_command_available("black")
     }
 
     fn version(&self) -> Option<String> {
-        // Run rustfmt --version
-        let output = Command::new("rustfmt").arg("--version").output().ok()?;
+        utils::get_command_version("black", &["--version"])
+    }
 
-        if output.status.success() {
-            // Parse the version from output
-            let version = String::from_utf8_lossy(&output.stdout).to_string();
-            let version = version.trim();
-            Some(version.to_string())
-        } else {
-            None
-        }
+    fn priority(&self) -> usize {
+        self.base.priority
     }
 }

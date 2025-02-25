@@ -48,13 +48,33 @@ impl DefaultToolRegistry {
 
     /// Register Rust tools
     fn register_rust_tools(&mut self) {
-        // TODO: Register Rust tools when implemented
+        use crate::tools::rust::{Clippy, Rustfmt};
+
+        // Register Rustfmt formatter
+        self.register_tool(Arc::new(Rustfmt::new()));
+
+        // Register Clippy linter
+        self.register_tool(Arc::new(Clippy::new()));
+
         debug!("Registered Rust tools");
     }
 
     /// Register Python tools
     fn register_python_tools(&mut self) {
-        // TODO: Register Python tools when implemented
+        use crate::tools::python::{Black, MyPy, PyLint, Ruff};
+
+        // Register Black formatter
+        self.register_tool(Arc::new(Black::new()));
+
+        // Register Ruff linter
+        self.register_tool(Arc::new(Ruff::new()));
+
+        // Register PyLint linter
+        self.register_tool(Arc::new(PyLint::new()));
+
+        // Register MyPy type checker
+        self.register_tool(Arc::new(MyPy::new()));
+
         debug!("Registered Python tools");
     }
 

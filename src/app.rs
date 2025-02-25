@@ -63,18 +63,31 @@ where
         // Detect project information
         let project_info = self.detect_project(&paths)?;
 
-        if self.verbosity >= Verbosity::Normal {
-            // Display detected project info
-            let info_output = self.output_formatter.format_detection(&project_info);
-            println!("{}", info_output);
-        }
+        // Always display detected project info (removed verbosity check)
+        let info_output = self.output_formatter.format_detection(&project_info);
+        println!("{}", info_output);
 
         // Select appropriate tools based on project_info and args
         let tools = self.select_tools_for_check(&project_info, &args, &config)?;
 
-        // Run the selected tools
-        if self.verbosity >= Verbosity::Normal {
-            println!("🔮 Running checks with {} tools...", tools.len());
+        // Always show tools being run
+        println!("🔮 Running checks with {} tools...", tools.len());
+
+        // List the tools being used (but only if there aren't too many)
+        if tools.len() <= 10 {
+            for tool in &tools {
+                println!(
+                    "   {} {} ({:?})",
+                    match tool.tool_type() {
+                        ToolType::Linter => "🔍",
+                        ToolType::TypeChecker => "🔎",
+                        ToolType::Formatter => "🎨",
+                        ToolType::Fixer => "🔧",
+                    },
+                    tool.name(),
+                    tool.language()
+                );
+            }
         }
 
         // Get files to check
@@ -84,12 +97,53 @@ where
                 .map(|p| p.as_path())
                 .unwrap_or_else(|| Path::new("."));
             crate::utils::get_git_modified_files(dir)?
+        } else if paths.is_empty() {
+            // If no paths are specified, use the current directory
+            let current_dir = Path::new(".");
+            self.collect_files_with_gitignore(current_dir)?
         } else {
-            paths
+            // Expand directories to files
+            let mut all_files = Vec::new();
+
+            for path in &paths {
+                if path.is_dir() {
+                    let dir_files = self.collect_files_with_gitignore(path)?;
+                    all_files.extend(dir_files);
+                } else if path.is_file() {
+                    all_files.push(path.clone());
+                }
+            }
+
+            all_files
         };
+
+        // Print information about files being checked - always show this information
+        println!("📂 Checking {} files...", files.len());
+
+        // Group files by language for better display
+        let files_by_language = self.group_files_by_language(&files);
+        for (language, lang_files) in &files_by_language {
+            println!(
+                "   {} {:?}: {} files",
+                match language {
+                    crate::models::Language::Rust => "🦀",
+                    crate::models::Language::Python => "🐍",
+                    crate::models::Language::JavaScript => "🌐",
+                    crate::models::Language::TypeScript => "📘",
+                    _ => "📄",
+                },
+                language,
+                lang_files.len()
+            );
+        }
+        println!();
 
         // Get default tool config
         let default_tool_config = config.tools.get("default").cloned().unwrap_or_default();
+
+        // Set auto_fix from command-line arguments
+        let mut default_tool_config = default_tool_config;
+        default_tool_config.auto_fix = Some(args.auto_fix);
 
         // Create a tool runner
         let tool_runner = ToolRunner::new(self.tool_registry.clone());
@@ -98,23 +152,21 @@ where
         let mut all_results = Vec::new();
         for linter in tools {
             // Get tool-specific config or use default
-            let config_tool_config = config
+            let mut config_tool_config = config
                 .tools
                 .get(linter.name())
                 .cloned()
                 .unwrap_or_else(|| default_tool_config.clone());
 
+            // Set auto_fix from command-line arguments
+            config_tool_config.auto_fix = Some(args.auto_fix);
+
             // Convert to the correct ToolConfig type for the runner
-            let config_for_runner = ConfigToolConfig {
-                enabled: config_tool_config.enabled,
-                config_file: config_tool_config.config_file.clone(),
-                extra_args: config_tool_config.extra_args.clone(),
-            };
+            let config_for_runner = convert_tool_config(&config_tool_config);
 
             // Execute the linter
-            let linter_ref = linter.as_ref();
             let results = tool_runner
-                .run_tools(vec![linter_ref], &files, &config_for_runner)
+                .run_tools(vec![linter.clone()], &files, &config_for_runner)
                 .await;
 
             // Process results
@@ -150,7 +202,7 @@ where
     /// Run the format command
     pub async fn format(
         &self,
-        args: FormatArgs,
+        _args: FormatArgs,
         paths: Vec<PathBuf>,
         git_modified_only: bool,
     ) -> Result<(), SirenError> {
@@ -250,7 +302,7 @@ where
     /// Run the fix command
     pub async fn fix(
         &self,
-        args: FixArgs,
+        _args: FixArgs,
         paths: Vec<PathBuf>,
         git_modified_only: bool,
     ) -> Result<(), SirenError> {
@@ -348,7 +400,7 @@ where
     }
 
     /// Run the detect command
-    pub fn detect(&self, args: DetectArgs, paths: Vec<PathBuf>) -> Result<(), SirenError> {
+    pub fn detect(&self, _args: DetectArgs, paths: Vec<PathBuf>) -> Result<(), SirenError> {
         // Detect project information
         let project_info = self.detect_project(&paths)?;
 
@@ -459,7 +511,7 @@ where
         &'a self,
         project_info: &ProjectInfo,
         args: &CheckArgs,
-        config: &SirenConfig,
+        _config: &SirenConfig,
     ) -> Result<Vec<Arc<dyn LintTool>>, SirenError> {
         let mut selected_tools = Vec::new();
 
@@ -520,6 +572,63 @@ where
 
         Ok(selected_tools)
     }
+
+    /// Group files by language
+    fn group_files_by_language(
+        &self,
+        files: &[PathBuf],
+    ) -> std::collections::HashMap<crate::models::Language, Vec<PathBuf>> {
+        let mut groups: std::collections::HashMap<crate::models::Language, Vec<PathBuf>> =
+            std::collections::HashMap::new();
+        for file in files {
+            let language = crate::utils::detect_language(file);
+            groups.entry(language).or_default().push(file.clone());
+        }
+        groups
+    }
+
+    /// Collect files respecting .gitignore and skipping hidden directories
+    fn collect_files_with_gitignore(&self, dir: &Path) -> Result<Vec<PathBuf>, SirenError> {
+        // Create an ignore builder that respects .gitignore files
+        let mut builder = ignore::WalkBuilder::new(dir);
+        builder.hidden(false); // Don't skip hidden files initially (needed to process .gitignore)
+        builder.git_ignore(true); // Respect .gitignore files
+        builder.git_global(true); // Respect global gitignore
+        builder.git_exclude(true); // Respect git exclude files
+
+        let mut files = Vec::new();
+
+        for result in builder.build() {
+            match result {
+                Ok(entry) => {
+                    let path = entry.path();
+
+                    // Skip hidden directories (starting with .)
+                    if path.components().any(|c| {
+                        if let std::path::Component::Normal(name) = c {
+                            let name_str = name.to_string_lossy();
+                            name_str.starts_with(".") && name_str != ".gitignore"
+                        } else {
+                            false
+                        }
+                    }) {
+                        continue;
+                    }
+
+                    if entry.file_type().map_or(false, |ft| ft.is_file()) {
+                        files.push(path.to_path_buf());
+                    }
+                }
+                Err(err) => {
+                    if self.verbosity >= Verbosity::Verbose {
+                        eprintln!("Error walking directory: {}", err);
+                    }
+                }
+            }
+        }
+
+        Ok(files)
+    }
 }
 
 // Helper function to convert from config::ToolConfig to models::tools::ToolConfig
@@ -533,6 +642,6 @@ fn convert_tool_config(config: &ConfigToolConfig) -> ModelsToolConfig {
             .clone()
             .map(|p| p.to_string_lossy().to_string()),
         report_level: None,
-        auto_fix: false,
+        auto_fix: config.auto_fix.unwrap_or(false),
     }
 }

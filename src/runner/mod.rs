@@ -1,12 +1,13 @@
 //! Tool execution and runner system
 
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use futures::future;
 use tokio::task;
 
-use crate::config::ToolConfig;
 use crate::errors::ToolError;
+use crate::models::tools::ToolConfig;
 use crate::models::{LintResult, ToolType};
 use crate::tools::{LintTool, ToolRegistry};
 
@@ -24,7 +25,7 @@ impl<R: ToolRegistry> ToolRunner<R> {
     /// Run tools in parallel
     pub async fn run_tools(
         &self,
-        tools: Vec<&dyn LintTool>,
+        tools: Vec<Arc<dyn LintTool>>,
         files: &[PathBuf],
         config: &ToolConfig,
     ) -> Vec<Result<LintResult, ToolError>> {
@@ -33,25 +34,14 @@ impl<R: ToolRegistry> ToolRunner<R> {
         // Spawn a task for each tool
         for tool in tools {
             // Clone the necessary data for the task
-            let tool_name = tool.name().to_string();
-            let _files = files.to_vec();
-            let _config = config.clone();
+            let files = files.to_vec();
+            let config = config.clone();
+            let tool = tool.clone();
 
             // Spawn a task to run the tool
             let handle = task::spawn_blocking(move || {
-                // Due to limitations of our current setup we can't easily move the
-                // tool trait object across threads, so we're just returning
-                // a placeholder result here.
-                // In a real implementation, we would execute the tool.
-                Ok(LintResult {
-                    tool_name,
-                    tool: None, // This would be the actual tool
-                    success: true,
-                    issues: Vec::new(),
-                    execution_time: std::time::Duration::from_secs(0),
-                    stdout: None,
-                    stderr: None,
-                })
+                // Actually execute the tool on the files
+                tool.execute(&files, &config)
             });
 
             handles.push(handle);
@@ -82,8 +72,7 @@ impl<R: ToolRegistry> ToolRunner<R> {
         config: &ToolConfig,
     ) -> Vec<Result<LintResult, ToolError>> {
         let tools = self.registry.get_tools_for_language(language);
-        let tools_refs: Vec<&dyn LintTool> = tools.iter().map(|t| t.as_ref()).collect();
-        self.run_tools(tools_refs, files, config).await
+        self.run_tools(tools, files, config).await
     }
 
     /// Get tools of a specific type and run them
@@ -94,7 +83,6 @@ impl<R: ToolRegistry> ToolRunner<R> {
         config: &ToolConfig,
     ) -> Vec<Result<LintResult, ToolError>> {
         let tools = self.registry.get_tools_by_type(tool_type);
-        let tools_refs: Vec<&dyn LintTool> = tools.iter().map(|t| t.as_ref()).collect();
-        self.run_tools(tools_refs, files, config).await
+        self.run_tools(tools, files, config).await
     }
 }

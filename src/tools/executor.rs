@@ -3,7 +3,6 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use log::{debug, error};
-use rayon::prelude::*;
 use tokio::task;
 
 use crate::errors::ToolError;
