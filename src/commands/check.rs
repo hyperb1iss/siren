@@ -142,12 +142,10 @@ where
         // Store captured outputs for display at the end - only if in verbose mode
         let mut captured_outputs = Vec::new();
 
-        // Run each linter and collect results
-        let mut all_results = Vec::new();
-        let mut tool_statuses = Vec::new();
-        let mut total_issues = 0;
-
-        // Process the scan and collect results
+        // Group tools by their config hash to run tools with the same config together
+        let mut tool_groups: HashMap<String, Vec<(Arc<dyn LintTool>, usize)>> = HashMap::new();
+        
+        // Set up all tools first and group them by config
         for linter in &tools {
             // Get tool-specific config or use default
             let mut config_tool_config = config
@@ -161,6 +159,10 @@ where
 
             // Convert to the correct ToolConfig type for the runner
             let config_for_runner = convert_tool_config(&config_tool_config);
+            
+            // Create a simple hash of the config to use as a key for grouping
+            // This is a simplification - in a real implementation we might want a better way to compare configs
+            let config_key = format!("{:?}", config_for_runner);
 
             // Create a status for this tool
             let language = format!("{:?}", linter.language());
@@ -173,13 +175,49 @@ where
                 debug!("Running linter: {} on {} files", linter.name(), files.len());
             }
 
-            // Execute the tool and capture results
-            let tool_results = tool_runner
-                .run_tools(vec![linter.clone()], &files, &config_for_runner)
+            // Group tools by their config
+            tool_groups
+                .entry(config_key)
+                .or_default()
+                .push((linter.clone(), spinner_index));
+        }
+
+        // Process results and update the status
+        let mut all_results = Vec::new();
+        let mut tool_statuses = Vec::new();
+        let mut total_issues = 0;
+
+        // Run each group of tools with the same config in parallel
+        for (_, group) in tool_groups {
+            // Extract tools and spinner indices
+            let group_tools: Vec<_> = group.iter().map(|(tool, _)| tool.clone()).collect();
+            let group_spinner_indices: Vec<_> = group.iter().map(|(_, idx)| *idx).collect();
+            
+            // Skip empty groups
+            if group_tools.is_empty() {
+                continue;
+            }
+            
+            // Get the config for this group (they all have the same config)
+            let linter = &group_tools[0];
+            let mut config_tool_config = config
+                .tools
+                .get(linter.name())
+                .cloned()
+                .unwrap_or_else(|| default_tool_config.clone());
+            config_tool_config.auto_fix = Some(args.auto_fix);
+            let config_for_runner = convert_tool_config(&config_tool_config);
+
+            // Run all tools in this group in parallel
+            let group_results = tool_runner
+                .run_tools(group_tools.clone(), &files, &config_for_runner)
                 .await;
 
-            // Process results and update the status
-            for result in tool_results {
+            // Process results for this group
+            for (i, result) in group_results.into_iter().enumerate() {
+                let linter = &group_tools[i];
+                let spinner_index = group_spinner_indices[i];
+
                 match result {
                     Ok(result) => {
                         let issues_count = result.issues.len();
