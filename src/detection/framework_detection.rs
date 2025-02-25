@@ -13,51 +13,43 @@ pub fn detect_frameworks(dir: &Path, languages: &[Language]) -> Vec<Framework> {
     }
 
     // Check for React
-    if languages.contains(&Language::JavaScript) || languages.contains(&Language::TypeScript) {
-        if is_react_project(dir) {
-            frameworks.push(Framework::React);
-            debug!("Detected React framework");
-        }
+    if (languages.contains(&Language::JavaScript) || languages.contains(&Language::TypeScript))
+        && is_react_project(dir)
+    {
+        frameworks.push(Framework::React);
+        debug!("Detected React framework");
     }
 
     // Check for Vue
-    if languages.contains(&Language::JavaScript) || languages.contains(&Language::TypeScript) {
-        if is_vue_project(dir) {
-            frameworks.push(Framework::Vue);
-            debug!("Detected Vue framework");
-        }
+    if (languages.contains(&Language::JavaScript) || languages.contains(&Language::TypeScript))
+        && is_vue_project(dir)
+    {
+        frameworks.push(Framework::Vue);
+        debug!("Detected Vue framework");
     }
 
     // Check for Angular
-    if languages.contains(&Language::TypeScript) {
-        if is_angular_project(dir) {
-            frameworks.push(Framework::Angular);
-            debug!("Detected Angular framework");
-        }
+    if languages.contains(&Language::TypeScript) && is_angular_project(dir) {
+        frameworks.push(Framework::Angular);
+        debug!("Detected Angular framework");
     }
 
     // Check for Django
-    if languages.contains(&Language::Python) {
-        if is_django_project(dir) {
-            frameworks.push(Framework::Django);
-            debug!("Detected Django framework");
-        }
+    if languages.contains(&Language::Python) && is_django_project(dir) {
+        frameworks.push(Framework::Django);
+        debug!("Detected Django framework");
     }
 
     // Check for Flask
-    if languages.contains(&Language::Python) {
-        if is_flask_project(dir) {
-            frameworks.push(Framework::Flask);
-            debug!("Detected Flask framework");
-        }
+    if languages.contains(&Language::Python) && is_flask_project(dir) {
+        frameworks.push(Framework::Flask);
+        debug!("Detected Flask framework");
     }
 
     // Check for Rails
-    if languages.contains(&Language::Ruby) {
-        if is_rails_project(dir) {
-            frameworks.push(Framework::Rails);
-            debug!("Detected Rails framework");
-        }
+    if languages.contains(&Language::Ruby) && is_rails_project(dir) {
+        frameworks.push(Framework::Rails);
+        debug!("Detected Rails framework");
     }
 
     frameworks
@@ -224,10 +216,8 @@ fn file_exists_recursive(dir: &Path, filename: &str, max_depth: usize) -> bool {
             let path = entry.path();
             if path.is_file() && path.file_name().and_then(|f| f.to_str()) == Some(filename) {
                 return true;
-            } else if path.is_dir() {
-                if file_exists_recursive(&path, filename, max_depth - 1) {
-                    return true;
-                }
+            } else if path.is_dir() && file_exists_recursive(&path, filename, max_depth - 1) {
+                return true;
             }
         }
     }

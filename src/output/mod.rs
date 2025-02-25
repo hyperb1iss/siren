@@ -107,7 +107,7 @@ impl OutputFormatter for PrettyFormatter {
                 let tool_names: Vec<_> = tools.iter().map(|t| t.name.as_str()).collect();
                 output.push_str(&format!("│ {}{}\n", tool_emoji, tool_names.join(", ")));
             } else {
-                output.push_str("\n");
+                output.push('\n');
             }
         }
 
@@ -138,9 +138,106 @@ impl OutputFormatter for PrettyFormatter {
             Vec<(&LintResult, &crate::models::LintIssue)>,
         > = std::collections::HashMap::new();
 
-        // First, collect all issues with their file paths
+        // First, see if we have any clippy or clippy-fix results with stdout/stderr
+        // that we want to show directly for better formatting and context
+        let clippy_results: Vec<_> = results
+            .iter()
+            .filter(|r| r.tool_name == "clippy" || r.tool_name == "clippy-fix")
+            .collect();
+
+        if !clippy_results.is_empty() && config.show_code_snippets {
+            // Show original clippy output for better context, when available
+            for result in clippy_results {
+                // First check if we have any issues to show
+                if result.issues.is_empty() {
+                    continue;
+                }
+
+                // Add separator for this tool's output
+                output.push_str(&format!("\n🦀 {} results:\n", result.tool_name));
+
+                if let Some(stderr) = &result.stderr {
+                    if !stderr.trim().is_empty() {
+                        // For clippy, the important info is in stderr
+                        // Add some formatting to make it easier to read
+                        let formatted_stderr = stderr
+                            .lines()
+                            .map(|line| {
+                                // Add colors to error/warning lines
+                                if line.trim().starts_with("error") {
+                                    format!("  🔴 {}", line)
+                                } else if line.trim().starts_with("warning") {
+                                    format!("  🟠 {}", line)
+                                } else if line.contains("-->") {
+                                    format!("  📄 {}", line)
+                                } else if line.contains("|")
+                                    && line.trim().starts_with(char::is_numeric)
+                                {
+                                    format!("     {}", line)
+                                } else if line.trim().starts_with("=") {
+                                    format!("  💡 {}", line)
+                                } else if line.trim().starts_with("help") {
+                                    format!("  💡 {}", line)
+                                } else {
+                                    format!("     {}", line)
+                                }
+                            })
+                            .collect::<Vec<_>>()
+                            .join("\n");
+
+                        output.push_str(&formatted_stderr);
+                        output.push('\n');
+                    }
+                }
+
+                if let Some(stdout) = &result.stdout {
+                    if !stdout.trim().is_empty() {
+                        // Sometimes important info can be in stdout
+                        output.push_str(stdout);
+                        output.push('\n');
+                    }
+                }
+
+                // Also show fixed count for clippy-fix
+                if result.tool_name == "clippy-fix" {
+                    let fixed_issues: Vec<_> = result
+                        .issues
+                        .iter()
+                        .filter(|i| {
+                            i.severity == crate::models::IssueSeverity::Info
+                                && i.message.contains("Fixed")
+                        })
+                        .collect();
+
+                    if !fixed_issues.is_empty() {
+                        for issue in fixed_issues {
+                            output.push_str(&format!(
+                                "\n  {} {}\n",
+                                if self.use_emoji { "✨" } else { "" },
+                                issue.message
+                            ));
+                        }
+                    }
+                }
+            }
+
+            // If we've added clippy output, add a separator
+            if !output.is_empty() {
+                output.push_str("\n──────────────────────────────────────────\n");
+            }
+        }
+
+        // Collect issues for non-clippy tools or if we want our regular format
         for result in results {
             for issue in &result.issues {
+                // Skip info messages about fixed issues (they're handled above)
+                if result.tool_name == "clippy-fix"
+                    && issue.severity == crate::models::IssueSeverity::Info
+                    && issue.message.contains("Fixed")
+                {
+                    continue;
+                }
+
                 if let Some(file) = &issue.file {
                     // Get filename for grouping
                     let file_key = if config.show_file_paths {
@@ -163,7 +260,7 @@ impl OutputFormatter for PrettyFormatter {
             }
         }
 
-        // If there are no issues, just return empty string
+        // If there are no issues, just return the output so far
         if by_file.is_empty() {
             return output;
         }
@@ -195,13 +292,13 @@ impl OutputFormatter for PrettyFormatter {
                 let line_info = if let Some(line) = issue.line {
                     // If we're showing the same line again, use a different prefix
                     if prev_line == Some(line) {
-                        format!("      ")
+                        "      ".to_string()
                     } else {
                         prev_line = Some(line);
                         format!("L{:<4}", line)
                     }
                 } else {
-                    format!("     ")
+                    "     ".to_string()
                 };
 
                 let severity_icon = if self.use_emoji {
@@ -297,14 +394,12 @@ impl OutputFormatter for PrettyFormatter {
             } else {
                 "❌"
             }
+        } else if error_count == 0 && warning_count == 0 {
+            "SUCCESS"
+        } else if error_count == 0 {
+            "WARNINGS"
         } else {
-            if error_count == 0 && warning_count == 0 {
-                "SUCCESS"
-            } else if error_count == 0 {
-                "WARNINGS"
-            } else {
-                "FAILED"
-            }
+            "FAILED"
         };
 
         let mut output = format!(

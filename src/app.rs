@@ -644,8 +644,8 @@ where
     }
 
     /// Select appropriate tools for checking based on project info and arguments
-    fn select_tools_for_check<'a>(
-        &'a self,
+    fn select_tools_for_check(
+        &self,
         project_info: &ProjectInfo,
         args: &CheckArgs,
         _config: &SirenConfig,

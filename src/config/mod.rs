@@ -52,7 +52,7 @@ impl Default for StyleConfig {
 }
 
 /// Language-specific configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct LanguageConfig {
     /// Line length
     pub line_length: Option<usize>,
@@ -62,16 +62,6 @@ pub struct LanguageConfig {
 
     /// Additional rules to enable
     pub enable_rules: Option<Vec<String>>,
-}
-
-impl Default for LanguageConfig {
-    fn default() -> Self {
-        Self {
-            line_length: None,
-            ignore_rules: None,
-            enable_rules: None,
-        }
-    }
 }
 
 /// Tool-specific configuration
@@ -133,7 +123,7 @@ impl Default for OutputConfig {
 }
 
 /// Main configuration for Siren
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct SirenConfig {
     /// General configuration
     #[serde(default)]
@@ -154,18 +144,6 @@ pub struct SirenConfig {
     /// Output configuration
     #[serde(default)]
     pub output: OutputConfig,
-}
-
-impl Default for SirenConfig {
-    fn default() -> Self {
-        Self {
-            general: GeneralConfig::default(),
-            style: StyleConfig::default(),
-            languages: HashMap::new(),
-            tools: HashMap::new(),
-            output: OutputConfig::default(),
-        }
-    }
 }
 
 /// TOML configuration provider

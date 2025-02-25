@@ -48,13 +48,16 @@ impl DefaultToolRegistry {
 
     /// Register Rust tools
     fn register_rust_tools(&mut self) {
-        use crate::tools::rust::{Clippy, Rustfmt};
+        use crate::tools::rust::{Clippy, ClippyFixer, Rustfmt};
 
         // Register Rustfmt formatter
         self.register_tool(Arc::new(Rustfmt::new()));
 
         // Register Clippy linter
         self.register_tool(Arc::new(Clippy::new()));
+
+        // Register ClippyFixer fixer
+        self.register_tool(Arc::new(ClippyFixer::new()));
 
         debug!("Registered Rust tools");
     }

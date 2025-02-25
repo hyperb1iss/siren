@@ -16,6 +16,11 @@ pub struct Clippy {
     base: ToolBase,
 }
 
+/// Clippy automatic fixer for Rust
+pub struct ClippyFixer {
+    base: ToolBase,
+}
+
 impl Clippy {
     /// Create a new Clippy linter
     pub fn new() -> Self {
@@ -161,6 +166,157 @@ impl Clippy {
 
         issues
     }
+
+    /// Find the directory containing Cargo.toml by walking up the directory tree
+    fn find_cargo_toml_dir(&self, file_path: &Path) -> Result<PathBuf, ToolError> {
+        let file_dir = if file_path.is_file() {
+            file_path.parent().unwrap_or(Path::new("."))
+        } else {
+            file_path
+        };
+
+        let mut current_dir = Some(file_dir.to_path_buf());
+
+        while let Some(dir) = current_dir {
+            let cargo_toml = dir.join("Cargo.toml");
+            if cargo_toml.exists() {
+                return Ok(dir);
+            }
+
+            // Move up to parent directory
+            current_dir = dir.parent().map(|p| p.to_path_buf());
+        }
+
+        // If we can't find a Cargo.toml, use the current directory
+        Ok(PathBuf::from("."))
+    }
+
+    /// Run clippy with the given arguments
+    fn run_clippy(
+        &self,
+        rust_files: &[PathBuf],
+        project_dir: &Path,
+        config: &ModelsToolConfig,
+        fix_mode: bool,
+    ) -> Result<(LintResult, String, String), ToolError> {
+        let start_time = Instant::now();
+
+        // Run clippy
+        let mut command = Command::new("cargo");
+        command.arg("clippy");
+        command.arg("--quiet"); // Suppress cargo output, only show clippy results
+
+        // If specific files are specified, add them to the command
+        // Clippy doesn't have a direct way to specify files, but we can at least
+        // print which files we're checking
+        if !rust_files.is_empty() {
+            // Log which files we're checking
+            println!(
+                "Running clippy on {} Rust files in {}",
+                rust_files.len(),
+                project_dir.display()
+            );
+        }
+
+        // Add extra arguments
+        for arg in &config.extra_args {
+            command.arg(arg);
+        }
+
+        // Add fix flag if in fix mode
+        if fix_mode {
+            command.arg("--fix");
+
+            // If the config specifies auto_fix=false, then we should only check, not fix
+            if !config.auto_fix {
+                command.arg("--allow-dirty");
+                command.arg("--allow-staged");
+            }
+        }
+
+        // Enable all clippy lints
+        command.args(["--", "-W", "clippy::all"]);
+
+        // Set current directory to project directory
+        command.current_dir(project_dir);
+
+        // Run the command
+        let output = command.output().map_err(|e| ToolError::ExecutionFailed {
+            name: self.name().to_string(),
+            message: format!("Failed to execute cargo clippy: {}", e),
+        })?;
+
+        // Parse output
+        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+        // Combine stdout and stderr for parsing
+        let combined_output = format!("{}\n{}", stdout, stderr);
+
+        // Parse issues
+        let mut issues = self.parse_output(&combined_output, project_dir);
+
+        // Filter issues to only include the files we were asked to check
+        if !rust_files.is_empty() {
+            let normalized_rust_files: Vec<PathBuf> = rust_files
+                .iter()
+                .map(|f| f.canonicalize().unwrap_or_else(|_| f.clone()))
+                .collect();
+
+            issues.retain(|issue| {
+                if let Some(file_path) = &issue.file {
+                    let normalized_path = file_path
+                        .canonicalize()
+                        .unwrap_or_else(|_| file_path.clone());
+                    normalized_rust_files.iter().any(|f| *f == normalized_path)
+                } else {
+                    true // Keep issues without file info
+                }
+            });
+        }
+
+        // Measure execution time
+        let execution_time = start_time.elapsed();
+
+        // Determine success
+        let success =
+            output.status.success() && !issues.iter().any(|i| i.severity == IssueSeverity::Error);
+
+        let result = LintResult {
+            tool_name: self.name().to_string(),
+            tool: Some(ToolInfo {
+                name: self.name().to_string(),
+                tool_type: self.tool_type(),
+                language: self.language(),
+                available: self.is_available(),
+                version: self.version(),
+                description: self.description().to_string(),
+            }),
+            success,
+            issues,
+            execution_time,
+            stdout: Some(stdout.clone()),
+            stderr: Some(stderr.clone()),
+        };
+
+        Ok((result, stdout, stderr))
+    }
+}
+
+impl ClippyFixer {
+    /// Create a new ClippyFixer
+    pub fn new() -> Self {
+        Self {
+            base: ToolBase {
+                name: "clippy-fix".to_string(),
+                description: "Automatically fix common mistakes in your Rust code with Clippy"
+                    .to_string(),
+                tool_type: ToolType::Fixer,
+                language: Language::Rust,
+                priority: 5,
+            },
+        }
+    }
 }
 
 impl LintTool for Clippy {
@@ -206,11 +362,6 @@ impl LintTool for Clippy {
             return Err(ToolError::NotFound(self.name().to_string()));
         }
 
-        // We need to run clippy in the context of a Cargo project,
-        // so we'll just run it on the whole project instead of specific files
-
-        let start_time = Instant::now();
-
         // Filter for Rust files only
         let rust_files: Vec<PathBuf> = files
             .iter()
@@ -239,128 +390,11 @@ impl LintTool for Clippy {
         }
 
         // Get the project directory (parent of the first file)
-        let project_dir = if let Some(file) = rust_files.first() {
-            let mut dir = file.parent().unwrap_or(Path::new(".")).to_path_buf();
-            // Find the Cargo.toml file
-            while !dir.join("Cargo.toml").exists() {
-                if let Some(parent) = dir.parent() {
-                    dir = parent.to_path_buf();
-                } else {
-                    break;
-                }
-            }
-            dir
-        } else {
-            // No files specified, use current directory
-            PathBuf::from(".")
-        };
+        let project_dir = self.find_cargo_toml_dir(rust_files.first().unwrap())?;
 
-        // Run clippy
-        let mut command = Command::new("cargo");
-        command.arg("clippy");
-        command.arg("--quiet"); // Suppress cargo output, only show clippy results
-
-        // If specific files are specified, add them to the command
-        // Clippy doesn't have a direct way to specify files, but we can at least
-        // print which files we're checking
-        if !rust_files.is_empty() && rust_files.len() < files.len() {
-            // Log which files we're checking
-            println!(
-                "Running clippy on {} Rust files in {}",
-                rust_files.len(),
-                project_dir.display()
-            );
-        }
-
-        // Add extra arguments
-        for arg in &config.extra_args {
-            command.arg(arg);
-        }
-
-        // Remove the JSON output format to get human-readable output
-        // that's easier to parse with our regex
-        // command.arg("--message-format=json");
-
-        // Enable all clippy lints
-        command.args(&["--", "-W", "clippy::all"]);
-
-        // Set current directory to project directory
-        command.current_dir(&project_dir);
-
-        // Run the command
-        let output = command.output().map_err(|e| ToolError::ExecutionFailed {
-            name: self.name().to_string(),
-            message: format!("Failed to execute cargo clippy: {}", e),
-        })?;
-
-        // Parse output
-        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-
-        // Debug output (only enable when working on this code)
-        // println!("Clippy stdout: {}", stdout);
-        // println!("Clippy stderr: {}", stderr);
-
-        // Combine stdout and stderr for parsing
-        let combined_output = format!("{}\n{}", stdout, stderr);
-
-        // Parse issues
-        let mut issues = self.parse_output(&combined_output, &project_dir);
-
-        // Debug the issues found - only enable when needed
-        // println!("Found {} issues from Clippy", issues.len());
-        // for issue in &issues {
-        //     println!("  - {:?}: {} at {:?}:{}:{}",
-        //         issue.severity,
-        //         issue.message,
-        //         issue.file.as_ref().map(|f| f.display().to_string()).unwrap_or_default(),
-        //         issue.line.unwrap_or(0),
-        //         issue.column.unwrap_or(0)
-        //     );
-        // }
-
-        // Filter issues to only include the files we were asked to check
-        if !rust_files.is_empty() {
-            let normalized_rust_files: Vec<PathBuf> = rust_files
-                .iter()
-                .map(|f| f.canonicalize().unwrap_or_else(|_| f.clone()))
-                .collect();
-
-            issues.retain(|issue| {
-                if let Some(file_path) = &issue.file {
-                    let normalized_path = file_path
-                        .canonicalize()
-                        .unwrap_or_else(|_| file_path.clone());
-                    normalized_rust_files.iter().any(|f| *f == normalized_path)
-                } else {
-                    true // Keep issues without file info
-                }
-            });
-        }
-
-        // Measure execution time
-        let execution_time = start_time.elapsed();
-
-        // Determine success
-        let success =
-            output.status.success() && !issues.iter().any(|i| i.severity == IssueSeverity::Error);
-
-        Ok(LintResult {
-            tool_name: self.name().to_string(),
-            tool: Some(ToolInfo {
-                name: self.name().to_string(),
-                tool_type: self.tool_type(),
-                language: self.language(),
-                available: self.is_available(),
-                version: self.version(),
-                description: self.description().to_string(),
-            }),
-            success,
-            issues,
-            execution_time,
-            stdout: Some(stdout),
-            stderr: Some(stderr),
-        })
+        // Run clippy in check mode (no fixing)
+        let (result, _, _) = self.run_clippy(&rust_files, &project_dir, config, false)?;
+        Ok(result)
     }
 
     fn tool_type(&self) -> ToolType {
@@ -394,5 +428,144 @@ impl LintTool for Clippy {
         } else {
             None
         }
+    }
+}
+
+impl LintTool for ClippyFixer {
+    fn name(&self) -> &str {
+        &self.base.name
+    }
+
+    fn can_handle(&self, file_path: &Path) -> bool {
+        if let Some(ext) = file_path.extension() {
+            ext == "rs"
+        } else {
+            false
+        }
+    }
+
+    fn execute(
+        &self,
+        files: &[PathBuf],
+        config: &ModelsToolConfig,
+    ) -> Result<LintResult, ToolError> {
+        // Skip if not enabled
+        if !config.enabled {
+            return Ok(LintResult {
+                tool_name: self.name().to_string(),
+                tool: Some(ToolInfo {
+                    name: self.name().to_string(),
+                    tool_type: self.tool_type(),
+                    language: self.language(),
+                    available: self.is_available(),
+                    version: self.version(),
+                    description: self.description().to_string(),
+                }),
+                success: true,
+                issues: Vec::new(),
+                execution_time: Duration::from_secs(0),
+                stdout: None,
+                stderr: None,
+            });
+        }
+
+        // Check if clippy is available
+        if !self.is_available() {
+            return Err(ToolError::NotFound(self.name().to_string()));
+        }
+
+        // Filter for Rust files only
+        let rust_files: Vec<PathBuf> = files
+            .iter()
+            .filter(|file| self.can_handle(file))
+            .cloned()
+            .collect();
+
+        // If no Rust files, return early with success
+        if rust_files.is_empty() {
+            return Ok(LintResult {
+                tool_name: self.name().to_string(),
+                tool: Some(ToolInfo {
+                    name: self.name().to_string(),
+                    tool_type: self.tool_type(),
+                    language: self.language(),
+                    available: self.is_available(),
+                    version: self.version(),
+                    description: self.description().to_string(),
+                }),
+                success: true,
+                issues: Vec::new(),
+                execution_time: Duration::from_secs(0),
+                stdout: Some("No Rust files to fix".to_string()),
+                stderr: None,
+            });
+        }
+
+        // Create a Clippy instance to use its functionality
+        let clippy = Clippy::new();
+
+        // Get the project directory (parent of the first file)
+        let project_dir = clippy.find_cargo_toml_dir(rust_files.first().unwrap())?;
+
+        // Run clippy in fix mode
+        let (mut result, _stdout, stderr) = clippy.run_clippy(&rust_files, &project_dir, config, true)?;
+
+        // Update the tool name and type for our result
+        result.tool_name = self.name().to_string();
+        if let Some(tool_info) = &mut result.tool {
+            tool_info.name = self.name().to_string();
+            tool_info.tool_type = self.tool_type();
+            tool_info.description = self.description().to_string();
+        }
+
+        // If stderr contains "fixed", extract the count of fixed issues
+        if let Some(fixed_count) = stderr.lines().find_map(|line| {
+            if line.contains("fixed ") && line.contains(" warning") {
+                line.split_whitespace()
+                    .find(|word| word.parse::<usize>().is_ok())
+                    .and_then(|num| num.parse::<usize>().ok())
+            } else {
+                None
+            }
+        }) {
+            // Add a fix message at the top of the result
+            if fixed_count > 0 {
+                result.issues.push(LintIssue {
+                    severity: IssueSeverity::Info,
+                    message: format!("✅ Fixed {} issues automatically", fixed_count),
+                    file: None,
+                    line: None,
+                    column: None,
+                    code: None,
+                    fix_available: false,
+                });
+            }
+        }
+
+        Ok(result)
+    }
+
+    fn tool_type(&self) -> ToolType {
+        self.base.tool_type
+    }
+
+    fn language(&self) -> Language {
+        self.base.language
+    }
+
+    fn description(&self) -> &str {
+        &self.base.description
+    }
+
+    fn is_available(&self) -> bool {
+        // Use the same availability check as Clippy
+        let clippy = Clippy::new();
+        clippy.is_available()
+    }
+
+    fn version(&self) -> Option<String> {
+        // Use the same version check as Clippy
+        let clippy = Clippy::new();
+        clippy.version()
     }
 }

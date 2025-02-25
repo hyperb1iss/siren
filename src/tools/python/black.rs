@@ -155,9 +155,7 @@ impl LintTool for Black {
 
             if fix_mode {
                 // Fix the file
-                if let Err(e) = self.fix_file(file, config) {
-                    return Err(e);
-                }
+                self.fix_file(file, config)?
             } else {
                 // Check the file
                 match self.check_file(file, config) {

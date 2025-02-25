@@ -138,10 +138,14 @@ impl DefaultToolRegistry {
     /// Create a new DefaultToolRegistry with default tools
     pub fn with_default_tools() -> Self {
         let mut registry = Self::new();
-
+        
         // Register default Rust tools
         registry.register_tool(Arc::new(rust::Rustfmt::new()));
         registry.register_tool(Arc::new(rust::Clippy::new()));
+        registry.register_tool(Arc::new(rust::ClippyFixer::new()));
+        
+        // We should also register Python and JS tools here, but for now we'll 
+        // just register Rust tools for simplicity
 
         registry
     }
@@ -154,14 +158,14 @@ impl ToolRegistry for DefaultToolRegistry {
     }
 
     fn get_all_tools(&self) -> Vec<Arc<dyn LintTool>> {
-        self.tools.values().map(|tool| Arc::clone(tool)).collect()
+        self.tools.values().map(Arc::clone).collect()
     }
 
     fn get_tools_for_language(&self, lang: Language) -> Vec<Arc<dyn LintTool>> {
         self.tools
             .values()
             .filter(|tool| tool.language() == lang)
-            .map(|tool| Arc::clone(tool))
+            .map(Arc::clone)
             .collect()
     }
 
@@ -169,12 +173,12 @@ impl ToolRegistry for DefaultToolRegistry {
         self.tools
             .values()
             .filter(|tool| tool.tool_type() == tool_type)
-            .map(|tool| Arc::clone(tool))
+            .map(Arc::clone)
             .collect()
     }
 
     fn get_tool_by_name(&self, name: &str) -> Option<Arc<dyn LintTool>> {
-        self.tools.get(name).map(|tool| Arc::clone(tool))
+        self.tools.get(name).map(Arc::clone)
     }
 
     fn get_tools_for_language_and_type(
@@ -185,7 +189,7 @@ impl ToolRegistry for DefaultToolRegistry {
         self.tools
             .values()
             .filter(|tool| tool.language() == language && tool.tool_type() == tool_type)
-            .map(|tool| Arc::clone(tool))
+            .map(Arc::clone)
             .collect()
     }
 
