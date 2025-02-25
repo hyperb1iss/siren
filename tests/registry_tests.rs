@@ -1,6 +1,3 @@
-use std::path::Path;
-use std::sync::Arc;
-
 use siren::models::{Language, ToolType};
 use siren::tools::{DefaultToolRegistry, ToolRegistry};
 

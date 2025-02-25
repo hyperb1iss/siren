@@ -1,5 +1,5 @@
 use clap::Parser;
-use siren::cli::{CheckArgs, Cli, Commands, FixArgs, FormatArgs, ListToolsArgs, Verbosity};
+use siren::cli::{Cli, Commands, Verbosity};
 use std::path::PathBuf;
 
 #[test]

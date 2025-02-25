@@ -4,5 +4,6 @@
 mod cli_tests;
 mod config_tests;
 mod executor_tests;
+mod integration_tests;
 mod language_tests;
 mod registry_tests;
