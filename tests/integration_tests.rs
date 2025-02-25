@@ -1,8 +1,7 @@
-use std::fs::{self, File};
+use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
 
-use siren::cli::Cli;
 use siren::models::tools::ToolConfig;
 use siren::models::{Language, ToolType};
 use siren::runner::ToolRunner;
@@ -458,7 +457,7 @@ fn test_cli_check_command() {
 
             // Verify default values
             assert_eq!(cli.verbose, 0, "Default verbosity should be 0");
-            assert_eq!(cli.quiet, false, "Should not be in quiet mode by default");
+            assert!(!cli.quiet, "Should not be in quiet mode by default");
         }
         _ => panic!("Expected Check command to be parsed"),
     }

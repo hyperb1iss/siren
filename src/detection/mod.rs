@@ -23,9 +23,16 @@ pub trait ProjectDetector {
 }
 
 /// Default implementation of ProjectDetector
+#[derive(Clone)]
 pub struct DefaultProjectDetector {
     /// Maximum depth to scan
     max_depth: usize,
+}
+
+impl Default for DefaultProjectDetector {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl DefaultProjectDetector {
@@ -138,7 +145,7 @@ impl ProjectDetector for DefaultProjectDetector {
                 dir.to_path_buf()
             } else {
                 std::env::current_dir()
-                    .map_err(|e| DetectionError::Io(e))?
+                    .map_err(DetectionError::Io)?
                     .join(dir)
             };
 

@@ -9,22 +9,22 @@ fn test_cli_default_values() {
 
     assert!(cli.command.is_none());
     assert!(cli.paths.is_empty());
-    assert_eq!(cli.git_modified, false);
+    assert!(!cli.git_modified);
     assert_eq!(cli.language, None);
     assert_eq!(cli.fail_level, None);
     assert_eq!(cli.verbose, 0);
-    assert_eq!(cli.quiet, false);
+    assert!(!cli.quiet);
     assert_eq!(cli.config, None);
     assert_eq!(cli.theme, None);
-    assert_eq!(cli.no_emoji, false);
-    assert_eq!(cli.ci, false);
+    assert!(!cli.no_emoji);
+    assert!(!cli.ci);
 }
 
 #[test]
 fn test_verbosity_levels() {
     // Test quiet flag
     let cli = Cli::parse_from(["siren", "--quiet"]);
-    assert_eq!(cli.quiet, true);
+    assert!(cli.quiet);
 
     // Test verbose flags
     let cli = Cli::parse_from(["siren", "-v"]);
@@ -61,11 +61,11 @@ fn test_check_command() {
 
     match cli.command {
         Some(Commands::Check(args)) => {
-            assert_eq!(args.strict, false);
+            assert!(!args.strict);
             assert_eq!(args.tools, None);
             assert_eq!(args.tool_types, None);
             assert_eq!(args.format, "pretty");
-            assert_eq!(args.auto_fix, false);
+            assert!(!args.auto_fix);
             assert_eq!(args.paths, vec![PathBuf::from("src/")]);
         }
         _ => panic!("Expected Check command"),
@@ -89,11 +89,11 @@ fn test_check_command() {
 
     match cli.command {
         Some(Commands::Check(args)) => {
-            assert_eq!(args.strict, true);
+            assert!(args.strict);
             assert_eq!(args.tools, Some(vec!["rustfmt,clippy".to_string()]));
             assert_eq!(args.tool_types, Some(vec!["formatter,linter".to_string()]));
             assert_eq!(args.format, "json");
-            assert_eq!(args.auto_fix, true);
+            assert!(args.auto_fix);
             assert_eq!(
                 args.paths,
                 vec![PathBuf::from("src/"), PathBuf::from("tests/")]
@@ -110,7 +110,7 @@ fn test_format_command() {
 
     match cli.command {
         Some(Commands::Format(args)) => {
-            assert_eq!(args.check, false);
+            assert!(!args.check);
             assert_eq!(args.tools, None);
             assert_eq!(args.paths, vec![PathBuf::from("src/")]);
         }
@@ -130,7 +130,7 @@ fn test_format_command() {
 
     match cli.command {
         Some(Commands::Format(args)) => {
-            assert_eq!(args.check, true);
+            assert!(args.check);
             assert_eq!(args.tools, Some(vec!["rustfmt,black".to_string()]));
             assert_eq!(
                 args.paths,
@@ -148,9 +148,9 @@ fn test_fix_command() {
 
     match cli.command {
         Some(Commands::Fix(args)) => {
-            assert_eq!(args.unsafe_fixes, false);
+            assert!(!args.unsafe_fixes);
             assert_eq!(args.tools, None);
-            assert_eq!(args.format, true); // Default is true
+            assert!(args.format); // Default is true
             assert_eq!(args.paths, vec![PathBuf::from("src/")]);
         }
         _ => panic!("Expected Fix command"),
@@ -170,9 +170,9 @@ fn test_fix_command() {
 
     match cli.command {
         Some(Commands::Fix(args)) => {
-            assert_eq!(args.unsafe_fixes, true);
+            assert!(args.unsafe_fixes);
             assert_eq!(args.tools, Some(vec!["clippy,ruff".to_string()]));
-            assert_eq!(args.format, true);
+            assert!(args.format);
             assert_eq!(
                 args.paths,
                 vec![PathBuf::from("src/"), PathBuf::from("tests/")]
@@ -191,7 +191,7 @@ fn test_list_tools_command() {
         Some(Commands::ListTools(args)) => {
             assert_eq!(args.language, None);
             assert_eq!(args.type_filter, None);
-            assert_eq!(args.available, false);
+            assert!(!args.available);
             assert_eq!(args.format, "pretty");
         }
         _ => panic!("Expected ListTools command"),
@@ -214,7 +214,7 @@ fn test_list_tools_command() {
         Some(Commands::ListTools(args)) => {
             assert_eq!(args.language, Some("rust".to_string()));
             assert_eq!(args.type_filter, Some("formatter".to_string()));
-            assert_eq!(args.available, true);
+            assert!(args.available);
             assert_eq!(args.format, "json");
         }
         _ => panic!("Expected ListTools command"),
@@ -236,7 +236,7 @@ fn test_global_options_with_commands() {
 
     assert_eq!(cli.verbose, 1);
     assert_eq!(cli.language, Some("rust".to_string()));
-    assert_eq!(cli.git_modified, true);
+    assert!(cli.git_modified);
 
     match cli.command {
         Some(Commands::Check(args)) => {

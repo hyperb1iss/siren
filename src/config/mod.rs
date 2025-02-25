@@ -149,6 +149,12 @@ pub struct SirenConfig {
 /// TOML configuration provider
 pub struct TomlConfigProvider;
 
+impl Default for TomlConfigProvider {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TomlConfigProvider {
     /// Create a new TOML configuration provider
     pub fn new() -> Self {

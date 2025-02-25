@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::Arc;
 
 use siren::models::{Language, ToolConfig, ToolType};
 use siren::runner::ToolRunner;

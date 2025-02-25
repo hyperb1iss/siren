@@ -146,6 +146,12 @@ pub struct DefaultToolRegistry {
     verbose: bool,
 }
 
+impl Default for DefaultToolRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DefaultToolRegistry {
     /// Create a new empty DefaultToolRegistry
     pub fn new() -> Self {
@@ -234,6 +240,12 @@ impl ToolRegistry for DefaultToolRegistry {
 /// Thread-safe tool registry
 pub struct ThreadSafeToolRegistry {
     inner: Arc<RwLock<DefaultToolRegistry>>,
+}
+
+impl Default for ThreadSafeToolRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ThreadSafeToolRegistry {

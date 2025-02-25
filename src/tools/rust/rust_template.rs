@@ -31,7 +31,7 @@ impl LintTool for TemplateTool {
             // Create a command to run the tool on this file
             let mut command = Command::new("your-tool-binary");
             command.arg(file);
-            
+
             // Add any extra arguments from config
             for arg in &config.extra_args {
                 command.arg(arg);
@@ -46,7 +46,7 @@ impl LintTool for TemplateTool {
             // Capture stdout and stderr
             let stdout = String::from_utf8_lossy(&output.stdout).to_string();
             let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-            
+
             // Append to the combined output
             if !stdout.is_empty() {
                 if !all_stdout.is_empty() {
@@ -54,7 +54,7 @@ impl LintTool for TemplateTool {
                 }
                 all_stdout.push_str(&stdout);
             }
-            
+
             if !stderr.is_empty() {
                 if !all_stderr.is_empty() {
                     all_stderr.push_str("\n\n");
@@ -83,8 +83,16 @@ impl LintTool for TemplateTool {
             success: true, // Tool executed successfully even if issues were found
             issues,
             execution_time,
-            stdout: if all_stdout.is_empty() { None } else { Some(all_stdout) },
-            stderr: if all_stderr.is_empty() { None } else { Some(all_stderr) },
+            stdout: if all_stdout.is_empty() {
+                None
+            } else {
+                Some(all_stdout)
+            },
+            stderr: if all_stderr.is_empty() {
+                None
+            } else {
+                Some(all_stderr)
+            },
         })
     }
 
@@ -107,4 +115,4 @@ impl LintTool for TemplateTool {
     fn version(&self) -> Option<String> {
         utils::get_command_version("your-tool-binary", &["--version"])
     }
-} 
+}

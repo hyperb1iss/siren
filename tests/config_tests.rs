@@ -24,21 +24,21 @@ fn test_default_config() {
 
     // Check general config defaults
     assert_eq!(default_config.general.fail_level, "error");
-    assert_eq!(default_config.general.use_relative_paths, true);
+    assert!(default_config.general.use_relative_paths);
 
     // Check style config defaults
     assert_eq!(default_config.style.theme, "default");
-    assert_eq!(default_config.style.use_emoji, true);
+    assert!(default_config.style.use_emoji);
 
     // Check that languages and tools maps are empty
     assert!(default_config.languages.is_empty());
     assert!(default_config.tools.is_empty());
 
     // Check output config defaults
-    assert_eq!(default_config.output.show_line_numbers, true);
-    assert_eq!(default_config.output.show_file_paths, true);
+    assert!(default_config.output.show_line_numbers);
+    assert!(default_config.output.show_file_paths);
     assert_eq!(default_config.output.max_issues_per_category, usize::MAX);
-    assert_eq!(default_config.output.show_code_snippets, true);
+    assert!(default_config.output.show_code_snippets);
 }
 
 #[test]
@@ -78,10 +78,10 @@ fn test_load_toml_config() {
 
     // Verify the loaded config has the expected values
     assert_eq!(config.general.fail_level, "warning");
-    assert_eq!(config.general.use_relative_paths, false);
+    assert!(!config.general.use_relative_paths);
 
     assert_eq!(config.style.theme, "ocean");
-    assert_eq!(config.style.use_emoji, false);
+    assert!(!config.style.use_emoji);
 
     // Check language config
     let rust_config = config
@@ -102,17 +102,17 @@ fn test_load_toml_config() {
         .tools
         .get("rustfmt")
         .expect("rustfmt config not found");
-    assert_eq!(rustfmt_config.enabled, true);
+    assert!(rustfmt_config.enabled);
     assert_eq!(
         rustfmt_config.extra_args,
         Some(vec!["--edition".to_string(), "2021".to_string()])
     );
 
     // Check output config
-    assert_eq!(config.output.show_line_numbers, false);
+    assert!(!config.output.show_line_numbers);
     assert_eq!(config.output.max_issues_per_category, 5);
-    assert_eq!(config.output.show_file_paths, true);
-    assert_eq!(config.output.show_code_snippets, true);
+    assert!(config.output.show_file_paths);
+    assert!(config.output.show_code_snippets);
 }
 
 #[test]
@@ -157,12 +157,12 @@ fn test_partial_config() {
     assert_eq!(config.general.fail_level, "info");
 
     let pylint_config = config.tools.get("pylint").expect("pylint config not found");
-    assert_eq!(pylint_config.enabled, false);
+    assert!(!pylint_config.enabled);
 
     // Verify unspecified fields have default values
-    assert_eq!(config.general.use_relative_paths, true); // Default value
+    assert!(config.general.use_relative_paths); // Default value
     assert_eq!(config.style.theme, "default"); // Default value
-    assert_eq!(config.style.use_emoji, true); // Default value
+    assert!(config.style.use_emoji); // Default value
     assert!(config.languages.is_empty());
 }
 

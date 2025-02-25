@@ -17,12 +17,19 @@ pub trait OutputFormatter {
 }
 
 /// Default implementation that uses pretty formatting with colors
+#[derive(Clone)]
 pub struct PrettyFormatter {
     /// Whether to use emojis
     use_emoji: bool,
 
     /// Whether to use colors (kept for future use)
     _use_colors: bool,
+}
+
+impl Default for PrettyFormatter {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl PrettyFormatter {
@@ -168,7 +175,7 @@ impl OutputFormatter for PrettyFormatter {
             };
 
             // Add separator before each tool
-            output.push_str("\n");
+            output.push('\n');
 
             // Add a nice separator
             let separator = "━".repeat(60).dimmed();
@@ -253,7 +260,7 @@ impl OutputFormatter for PrettyFormatter {
                     }
                 }
 
-                output.push_str("\n");
+                output.push('\n');
             } else if result.issues.is_empty() {
                 // No output and no issues, show a success message
                 output.push_str(&format!("  {} No issues detected!\n\n", "✨".green()));

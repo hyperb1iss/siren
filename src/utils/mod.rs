@@ -254,3 +254,37 @@ pub fn expand_glob_patterns(base_dir: &Path, patterns: &[PathBuf]) -> Vec<PathBu
 
     result
 }
+
+/// Collect files from a directory, respecting gitignore and skipping .git directory
+pub fn collect_files_with_gitignore(dir: &Path) -> Result<Vec<PathBuf>, crate::errors::SirenError> {
+    let mut files = Vec::new();
+
+    // Use ignore to respect gitignore rules
+    let walker = ignore::WalkBuilder::new(dir)
+        .hidden(false) // Don't ignore hidden files by default
+        .git_ignore(true) // Respect .gitignore
+        .git_global(true) // Respect global gitignore
+        .git_exclude(true) // Respect .git/info/exclude
+        .build();
+
+    for entry in walker.filter_map(Result::ok) {
+        let path = entry.path();
+
+        // Skip the .git directory and its contents
+        if path.components().any(|c| {
+            if let std::path::Component::Normal(name) = c {
+                name.to_string_lossy() == ".git"
+            } else {
+                false
+            }
+        }) {
+            continue;
+        }
+
+        if entry.file_type().map_or(false, |ft| ft.is_file()) {
+            files.push(path.to_path_buf());
+        }
+    }
+
+    Ok(files)
+}
