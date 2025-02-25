@@ -103,15 +103,8 @@ impl OutputFormatter for PrettyFormatter {
 
         let mut output = String::new();
 
-        // Add total issues found
-        let total_issues: usize = results.iter().map(|r| r.issues.len()).sum();
-
         if !results.is_empty() {
-            output.push_str(&format!(
-                "\nFound {} issues across {} tools\n\n",
-                total_issues,
-                results.len()
-            ));
+            output.push('\n');
             output.push_str(&divider());
         }
 
@@ -280,51 +273,130 @@ impl OutputFormatter for PrettyFormatter {
         let mut output = String::new();
 
         // Add divider
-        output.push('\n');
         output.push_str(&divider());
 
-        // Add status header
+        // Calculate total issues
+        let total_issues = error_count + warning_count + style_count + info_count;
+
+        // Add status header with a more refined cyberpunk aesthetic
         if error_count > 0 {
-            output.push_str(&format!(
-                "\n\n  {} {}\n\n",
-                "❌".red(),
-                "Errors found".red().bold()
-            ));
+            output.push('\n');
+            output.push_str("  ");
+            output.push_str(&"✖".bright_red().bold().to_string());
+            output.push(' ');
+            output.push_str(
+                &"Code quality issues detected"
+                    .bright_red()
+                    .bold()
+                    .to_string(),
+            );
+            output.push('\n');
         } else if warning_count > 0 || style_count > 0 {
-            output.push_str(&format!(
-                "\n\n  {} {}\n\n",
-                "⚠️".yellow(),
-                "Warnings found".yellow().bold()
-            ));
+            output.push('\n');
+            output.push_str("  ");
+            output.push_str(&"⚠".bright_yellow().bold().to_string());
+            output.push(' ');
+            output.push_str(
+                &"Style optimizations available"
+                    .bright_yellow()
+                    .bold()
+                    .to_string(),
+            );
+            output.push('\n');
         } else {
-            output.push_str(&format!(
-                "\n\n  {} {}\n\n",
-                "✓".green(),
-                "All checks passed!".green().bold()
-            ));
+            output.push('\n');
+            output.push_str("  ");
+            output.push_str(&"✓".bright_green().bold().to_string());
+            output.push(' ');
+            output.push_str(
+                &"System integrity verified"
+                    .bright_green()
+                    .bold()
+                    .to_string(),
+            );
+            output.push('\n');
         }
 
-        // Add count summary
-        output.push_str(&format!(
-            "  📊 Found: {} errors, {} style issues, {} info notes\n",
-            error_count,
-            warning_count + style_count,
-            info_count
-        ));
+        // Add a stylish separator
+        output.push_str("  ");
+        output.push_str(&"┈".repeat(36).bright_blue().to_string());
+        output.push('\n');
 
-        // Add files affected
-        output.push_str(&format!("  📁 Affected: {} files\n", files_affected.len()));
+        // Add count summary with better formatting and icons
+        if total_issues > 0 {
+            output.push_str("  ");
+            output.push_str(&"⚡".bright_cyan().to_string());
+            output.push(' ');
+            output.push_str(
+                &format!("Scan complete: {} issues identified", total_issues)
+                    .bright_white()
+                    .bold()
+                    .to_string(),
+            );
+            output.push('\n');
+
+            // Create a more detailed breakdown with better spacing and alignment
+            let mut details = Vec::new();
+            if error_count > 0 {
+                details.push(format!(
+                    "{} errors",
+                    error_count.to_string().bright_red().bold()
+                ));
+            }
+            if warning_count + style_count > 0 {
+                details.push(format!(
+                    "{} style issues",
+                    (warning_count + style_count)
+                        .to_string()
+                        .bright_yellow()
+                        .bold()
+                ));
+            }
+            if info_count > 0 {
+                details.push(format!(
+                    "{} info notes",
+                    info_count.to_string().bright_blue().bold()
+                ));
+            }
+
+            let details_str = details.join(" • ");
+            output.push_str("  ");
+            output.push_str(&"▸".bright_magenta().to_string());
+            output.push(' ');
+            output.push_str(&details_str);
+            output.push('\n');
+
+            // Add files affected with a more cyberpunk icon
+            output.push_str("  ");
+            output.push_str(&"◈".bright_magenta().to_string());
+            output.push(' ');
+            output.push_str(&format!(
+                "Affected files: {}",
+                files_affected.len().to_string().bright_white().bold()
+            ));
+            output.push('\n');
+        } else {
+            output.push_str("  ");
+            output.push_str(&"⚡".bright_green().to_string());
+            output.push(' ');
+            output.push_str(&"All systems operational".bright_green().bold().to_string());
+            output.push('\n');
+        }
 
         // Add breakdown by tool if there are multiple tools
-        if tool_counts.len() > 1 {
-            output.push_str("\n  🔍 Breakdown by tool:\n");
+        if tool_counts.len() > 1 && total_issues > 0 {
+            output.push('\n');
+            output.push_str("  ");
+            output.push_str(&"⟁".bright_cyan().to_string());
+            output.push(' ');
+            output.push_str(&"Issue distribution".bright_cyan().bold().to_string());
+            output.push('\n');
 
             // Sort tools by issue count (descending)
             let mut tools: Vec<_> = tool_counts.iter().collect();
             tools.sort_by(|a, b| b.1.cmp(a.1));
 
             // Calculate percentages
-            let total_issues = error_count + warning_count + style_count + info_count;
             let percentage = |count: &i32| {
                 if total_issues > 0 {
                     ((*count as f64 / total_issues as f64) * 100.0).round() as i32
@@ -333,8 +405,13 @@ impl OutputFormatter for PrettyFormatter {
                 }
             };
 
-            // Format each tool's breakdown
+            // Format each tool's breakdown with a more cyberpunk style
             for (tool_name, count) in tools {
+                // Skip tools with no issues
+                if *count == 0 {
+                    continue;
+                }
+
                 let tool_emoji = match tool_name.as_str() {
                     "pylint" => "🐍🔍",
                     "mypy" => "🐍🔎",
@@ -345,13 +422,23 @@ impl OutputFormatter for PrettyFormatter {
                     _ => "🔧",
                 };
 
-                output.push_str(&format!(
-                    "    {} {} - {} issues ({}%)\n",
-                    tool_emoji,
-                    tool_name,
-                    count,
-                    percentage(count)
-                ));
+                let percent = percentage(count);
+                let bar_length = (percent as usize * 15) / 100;
+                let bar = format!(
+                    "{}{}",
+                    "█".repeat(bar_length).bright_magenta(),
+                    "▒".repeat(15 - bar_length).dimmed()
+                );
+
+                output.push_str("  ");
+                output.push_str(tool_emoji);
+                output.push(' ');
+                output.push_str(&format!("{:<8}", tool_name).bright_white().to_string());
+                output.push(' ');
+                output.push_str(&bar);
+                output.push(' ');
+                output.push_str(&format!("{:>3}%", percent).bright_cyan().to_string());
+                output.push('\n');
             }
         }
 

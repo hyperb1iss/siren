@@ -265,26 +265,19 @@ where
             }
         }
 
-        // Format and display results
+        // Print the results
         if !all_results.is_empty() {
-            // Print any error messages we collected during tool execution
-            for status in tool_statuses {
-                eprintln!("{}", status);
-            }
+            // Print the results
+            println!(
+                "{}",
+                self.output_formatter
+                    .format_results(&all_results, &config.output)
+            );
 
-            println!("\ndetailed analysis:");
-
-            // Format and print the actual results
-            let results_output = self
-                .output_formatter
-                .format_results(&all_results, &config.output);
-            println!("{}", results_output);
-
-            // Display summary
-            let summary = self.output_formatter.format_summary(&all_results);
-            println!("{}", summary);
-        } else if self.verbosity >= Verbosity::Normal {
-            println!("\nall systems operational - no issues detected");
+            // Print the summary
+            println!("{}", self.output_formatter.format_summary(&all_results));
+        } else {
+            println!("\nNo issues found!");
         }
 
         Ok(())

@@ -25,16 +25,24 @@ impl EnchantedColors {
 
 /// Styled section header
 pub fn section_header(title: &str) -> String {
+    // Create a more interesting header with cyberpunk styling but without box ends
+    let prefix = "╸⟪ ";
+    let suffix = " ⟫╺";
+
     format!(
         "\n{}\n",
-        EnchantedColors::primary().apply_to(format!("━━━ {} ━━━", title))
+        EnchantedColors::primary().apply_to(format!("{}{}{}", prefix, title, suffix))
     )
 }
 
 /// Styled divider line
 pub fn divider() -> String {
+    // Create a more interesting divider with a mix of characters for a cyberpunk feel
+    let divider_pattern = "═━═━═━═━═━═━═━═━═━═━═━═━═━═━═━═━═━═━═━═━═━═━═━═━═━═━═━";
+
+    // Apply subtle styling without box ends for a cleaner look
     EnchantedColors::subtle()
-        .apply_to("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        .apply_to(divider_pattern)
         .to_string()
 }
 
@@ -235,18 +243,6 @@ impl NeonDisplay {
             "scan complete".bright_cyan()
         );
 
-        if total_issues > 0 {
-            println!(
-                "{} {}",
-                "result:".bright_white(),
-                format!("{} issues detected", total_issues).bright_red()
-            );
-        } else {
-            println!(
-                "{} {}",
-                "result:".bright_white(),
-                "no issues detected".bright_green()
-            );
-        }
+        // We'll skip printing the issue count here since it will be in the summary
     }
 }
