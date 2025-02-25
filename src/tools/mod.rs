@@ -12,6 +12,15 @@ mod python;
 mod registry;
 mod rust;
 
+// Re-export registry for public use
+pub use registry::*;
+
+// Re-export Python tools
+pub use python::*;
+
+// Re-export Rust tools
+pub use rust::*;
+
 /// Trait for lint/format tools
 pub trait LintTool: Send + Sync {
     /// Get the tool name
@@ -137,6 +146,7 @@ impl DefaultToolRegistry {
 
     /// Create a new DefaultToolRegistry with default tools
     pub fn with_default_tools() -> Self {
+        eprintln!("DEBUG: Creating tools registry in tools/mod.rs");
         let mut registry = Self::new();
 
         // Register default Rust tools
@@ -144,8 +154,17 @@ impl DefaultToolRegistry {
         registry.register_tool(Arc::new(rust::Clippy::new()));
         registry.register_tool(Arc::new(rust::ClippyFixer::new()));
 
-        // We should also register Python and JS tools here, but for now we'll
-        // just register Rust tools for simplicity
+        // Register Python tools
+        eprintln!("DEBUG: Registering Python tools directly in tools/mod.rs");
+        registry.register_tool(Arc::new(python::Ruff::new()));
+        registry.register_tool(Arc::new(python::PyLint::new()));
+        registry.register_tool(Arc::new(python::MyPy::new()));
+        registry.register_tool(Arc::new(python::Black::new()));
+
+        eprintln!(
+            "DEBUG: Finished registering tools in tools/mod.rs - total tools: {}",
+            registry.tools.len()
+        );
 
         registry
     }

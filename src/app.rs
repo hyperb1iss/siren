@@ -745,10 +745,19 @@ where
     ) -> Result<Vec<Arc<dyn LintTool>>, SirenError> {
         let mut selected_tools = Vec::new();
 
+        // Debug - Print all languages detected
+        eprintln!("DEBUG: Detected languages: {:?}", project_info.languages);
+
         // If specific tools are requested, use those
         if let Some(tool_names) = &args.tools {
+            eprintln!("DEBUG: Specific tools requested: {:?}", tool_names);
             for name in tool_names {
                 if let Some(tool) = self.tool_registry.get_tool_by_name(name) {
+                    eprintln!(
+                        "DEBUG: Found tool '{}', available: {}",
+                        name,
+                        tool.is_available()
+                    );
                     selected_tools.push(tool);
                 } else if self.verbosity >= Verbosity::Normal {
                     eprintln!("⚠️ Tool '{}' not found", name);
@@ -780,24 +789,53 @@ where
         }
 
         // Otherwise, select tools based on detected languages
+        eprintln!("DEBUG: Selecting tools based on detected languages");
         for language in &project_info.languages {
+            eprintln!("DEBUG: Getting tools for language: {:?}", language);
             let language_tools = self.tool_registry.get_tools_for_language(*language);
+            eprintln!(
+                "DEBUG: Found {} tools for {:?}",
+                language_tools.len(),
+                language
+            );
 
             // For general check, prefer linters and type checkers
             let filtered_tools: Vec<_> = language_tools
                 .into_iter()
                 .filter(|tool| {
                     let tool_type = tool.tool_type();
-                    tool_type == ToolType::Linter || tool_type == ToolType::TypeChecker
+                    let available = tool.is_available();
+                    eprintln!(
+                        "DEBUG:   - Tool: {}, Type: {:?}, Available: {}",
+                        tool.name(),
+                        tool_type,
+                        available
+                    );
+                    (tool_type == ToolType::Linter || tool_type == ToolType::TypeChecker)
+                        && available
                 })
                 .collect();
 
+            eprintln!(
+                "DEBUG: Selected {} tools after filtering",
+                filtered_tools.len()
+            );
             selected_tools.extend(filtered_tools);
         }
 
         // If strict mode, add additional strict tools
         if args.strict {
             // TODO: Add strictness logic here
+        }
+
+        // Debug - Print selected tools
+        eprintln!("DEBUG: Final selected tools: {}", selected_tools.len());
+        for tool in &selected_tools {
+            eprintln!(
+                "DEBUG:   - {}, Available: {}",
+                tool.name(),
+                tool.is_available()
+            );
         }
 
         Ok(selected_tools)

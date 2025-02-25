@@ -43,6 +43,18 @@ async fn main() -> Result<(), SirenError> {
     let detector = detection::DefaultProjectDetector::new();
     let config_provider = config::TomlConfigProvider::new();
     let tool_registry = tools::DefaultToolRegistry::with_default_tools();
+
+    // Debug print all tools to help diagnose issues
+    eprintln!("DEBUG: All tools registered in main.rs:");
+    for tool in tool_registry.get_all_tools() {
+        eprintln!(
+            "DEBUG:   - {} ({:?}) - Available: {}",
+            tool.name(),
+            tool.language(),
+            tool.is_available()
+        );
+    }
+
     let output_formatter = output::PrettyFormatter::new();
 
     // Create the Siren app

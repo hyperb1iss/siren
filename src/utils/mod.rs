@@ -7,7 +7,12 @@ use std::process::Command;
 
 /// Check if a command exists in PATH
 pub fn command_exists<S: AsRef<OsStr>>(command: S) -> bool {
-    which::which(command).is_ok()
+    let cmd = command.as_ref();
+    eprintln!("DEBUG: Checking if command exists: {:?}", cmd);
+    let command_str = cmd.to_str().unwrap_or("[non-utf8]");
+    let result = which::which(command_str).is_ok();
+    eprintln!("DEBUG: Command {:?} exists: {}", cmd, result);
+    result
 }
 
 /// Check if a command is available in PATH (alias for command_exists)

@@ -19,8 +19,13 @@ impl DefaultToolRegistry {
 
     /// Create a registry with default tools for all languages
     pub fn with_default_tools() -> Self {
+        eprintln!("DEBUG: Creating registry with default tools");
         let mut registry = Self::new();
         registry.register_default_tools();
+        eprintln!(
+            "DEBUG: After registering default tools, total tools: {}",
+            registry.tools.len()
+        );
         registry
     }
 
@@ -31,19 +36,33 @@ impl DefaultToolRegistry {
 
     /// Register all default tools for all languages
     fn register_default_tools(&mut self) {
-        // Register Rust tools
+        eprintln!("DEBUG: Registering default tools");
+        eprintln!(
+            "DEBUG: Before any registration, tool count: {}",
+            self.tools.len()
+        );
+
+        // Register all tool categories
         self.register_rust_tools();
+        eprintln!("DEBUG: After rust tools, tool count: {}", self.tools.len());
 
-        // Register Python tools
-        self.register_python_tools();
+        self.register_python_tools(); // Make sure this line is uncommented
+        eprintln!(
+            "DEBUG: After python tools, tool count: {}",
+            self.tools.len()
+        );
 
-        // Register JavaScript/TypeScript tools
         self.register_js_tools();
+        eprintln!("DEBUG: After js tools, tool count: {}", self.tools.len());
 
-        // Register other tools
         self.register_other_tools();
+        eprintln!("DEBUG: After other tools, tool count: {}", self.tools.len());
 
-        info!("Registered {} tools", self.tools.len());
+        // Debug print all registered tools
+        eprintln!("DEBUG: Registered tools:");
+        for tool in &self.tools {
+            eprintln!("DEBUG:   - {} ({:?})", tool.name(), tool.language());
+        }
     }
 
     /// Register Rust tools
@@ -64,21 +83,38 @@ impl DefaultToolRegistry {
 
     /// Register Python tools
     fn register_python_tools(&mut self) {
-        use crate::tools::python::{Black, MyPy, PyLint, Ruff};
+        use crate::tools::python::Black;
+        use crate::tools::python::MyPy;
+        use crate::tools::python::PyLint;
+        use crate::tools::python::Ruff;
 
-        // Register Black formatter
-        self.register_tool(Arc::new(Black::new()));
+        eprintln!("DEBUG: Registering Python tools");
 
-        // Register Ruff linter
-        self.register_tool(Arc::new(Ruff::new()));
+        // Create and check Ruff
+        let ruff = Ruff::new();
+        let is_ruff_available = ruff.is_available();
+        eprintln!("DEBUG: Ruff available: {}", is_ruff_available);
+        self.register_tool(Arc::new(ruff));
 
-        // Register PyLint linter
-        self.register_tool(Arc::new(PyLint::new()));
+        // Create and check PyLint
+        let pylint = PyLint::new();
+        let is_pylint_available = pylint.is_available();
+        eprintln!("DEBUG: PyLint available: {}", is_pylint_available);
+        self.register_tool(Arc::new(pylint));
 
-        // Register MyPy type checker
-        self.register_tool(Arc::new(MyPy::new()));
+        // Create and check MyPy
+        let mypy = MyPy::new();
+        let is_mypy_available = mypy.is_available();
+        eprintln!("DEBUG: MyPy available: {}", is_mypy_available);
+        self.register_tool(Arc::new(mypy));
 
-        debug!("Registered Python tools");
+        // Create and check Black
+        let black = Black::new();
+        let is_black_available = black.is_available();
+        eprintln!("DEBUG: Black available: {}", is_black_available);
+        self.register_tool(Arc::new(black));
+
+        eprintln!("DEBUG: Python tools registration complete");
     }
 
     /// Register JavaScript/TypeScript tools
@@ -109,11 +145,51 @@ impl ToolRegistry for DefaultToolRegistry {
     }
 
     fn get_tools_for_language(&self, language: Language) -> Vec<Arc<dyn LintTool>> {
-        self.tools
+        eprintln!("DEBUG: Getting tools for language: {:?}", language);
+        eprintln!("DEBUG: Total tools in registry: {}", self.tools.len());
+
+        // Debug print all tools first
+        eprintln!("DEBUG: All tools in registry:");
+        for tool in &self.tools {
+            eprintln!(
+                "DEBUG:   Tool: {}, Language: {:?} ({:?})",
+                tool.name(),
+                tool.language(),
+                std::mem::discriminant(&tool.language())
+            );
+        }
+
+        // Debug print language we're looking for
+        eprintln!(
+            "DEBUG: Looking for language: {:?} ({:?})",
+            language,
+            std::mem::discriminant(&language)
+        );
+
+        let tools = self.tools
             .iter()
-            .filter(|tool| tool.language() == language)
+            .filter(|tool| {
+                let tool_lang = tool.language();
+                let matches = tool_lang == language;
+                eprintln!("DEBUG:   - Tool: {}, Language: {:?}, Matches: {} (comparison: {:?} == {:?}, or {:?} == {:?})", 
+                          tool.name(),
+                          tool_lang,
+                          matches,
+                          tool_lang,
+                          language,
+                          std::mem::discriminant(&tool_lang),
+                          std::mem::discriminant(&language));
+                matches
+            })
             .cloned()
-            .collect()
+            .collect::<Vec<_>>();
+
+        eprintln!(
+            "DEBUG: Found {} tools for language {:?}",
+            tools.len(),
+            language
+        );
+        tools
     }
 
     fn get_tools_by_type(&self, tool_type: ToolType) -> Vec<Arc<dyn LintTool>> {
