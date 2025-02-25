@@ -202,7 +202,7 @@ where
     /// Run the format command
     pub async fn format(
         &self,
-        _args: FormatArgs,
+        args: FormatArgs,
         paths: Vec<PathBuf>,
         git_modified_only: bool,
     ) -> Result<(), SirenError> {
@@ -212,27 +212,53 @@ where
         // Detect project information
         let project_info = self.detect_project(&paths)?;
 
-        if self.verbosity >= Verbosity::Normal {
-            // Display detected project info
-            let info_output = self.output_formatter.format_detection(&project_info);
-            println!("{}", info_output);
-        }
+        // Always display detected project info
+        let info_output = self.output_formatter.format_detection(&project_info);
+        println!("{}", info_output);
+
+        // Print detected languages
+        println!("🔍 Detected languages: {:?}", project_info.languages);
 
         // Select appropriate formatting tools
         let mut formatters = Vec::new();
         for language in &project_info.languages {
+            println!("  Looking for formatters for {:?}...", language);
             let language_formatters = self
                 .tool_registry
                 .get_tools_for_language_and_type(*language, ToolType::Formatter);
+
+            println!(
+                "  Found {} formatters for {:?}",
+                language_formatters.len(),
+                language
+            );
             for formatter in language_formatters {
+                println!(
+                    "    - {} (available: {})",
+                    formatter.name(),
+                    formatter.is_available()
+                );
                 formatters.push(formatter);
             }
         }
 
         if formatters.is_empty() {
-            if self.verbosity >= Verbosity::Normal {
-                println!("⚠️ No formatters found for the detected languages.");
+            println!("⚠️ No formatters found for the detected languages. Available tools:");
+
+            // Print all available tools to help debug
+            for language in &project_info.languages {
+                let all_tools = self.tool_registry.get_tools_for_language(*language);
+                println!("  Tools for {:?}:", language);
+                for tool in all_tools {
+                    println!(
+                        "    - {} ({:?}, available: {})",
+                        tool.name(),
+                        tool.tool_type(),
+                        tool.is_available()
+                    );
+                }
             }
+
             return Ok(());
         }
 
@@ -243,16 +269,34 @@ where
                 .map(|p| p.as_path())
                 .unwrap_or_else(|| Path::new("."));
             crate::utils::get_git_modified_files(dir)?
+        } else if paths.is_empty() {
+            // If no paths are specified, use the current directory
+            let current_dir = Path::new(".");
+            self.collect_files_with_gitignore(current_dir)?
         } else {
-            paths
+            // Expand directories to files
+            let mut all_files = Vec::new();
+
+            for path in &paths {
+                if path.is_dir() {
+                    let dir_files = self.collect_files_with_gitignore(path)?;
+                    all_files.extend(dir_files);
+                } else if path.is_file() {
+                    all_files.push(path.clone());
+                }
+            }
+
+            all_files
         };
 
-        if self.verbosity >= Verbosity::Normal {
-            println!(
-                "💅 Formatting {} files with {} formatters...",
-                files.len(),
-                formatters.len()
-            );
+        println!("📂 Found {} files to format:", files.len());
+        for file in &files {
+            println!("  - {}", file.display());
+        }
+
+        if files.is_empty() {
+            println!("⚠️ No files found to format!");
+            return Ok(());
         }
 
         // Default tool config
@@ -261,23 +305,38 @@ where
         // Format files with each formatter
         let mut all_results = Vec::new();
         for formatter in formatters {
+            // Skip tools that aren't available
+            if !formatter.is_available() {
+                println!("⚠️ Skipping unavailable formatter: {}", formatter.name());
+                continue;
+            }
+
             // Get tool-specific config or use default
-            let config_tool_config = config
+            let mut config_tool_config = config
                 .tools
                 .get(formatter.name())
                 .cloned()
                 .unwrap_or_else(|| default_tool_config.clone());
+
+            // Set check mode from command-line arguments
+            config_tool_config.check = Some(args.check);
+
             let tool_config = convert_tool_config(&config_tool_config);
 
             // Execute the formatter
+            println!("🔨 Running formatter: {}", formatter.name());
             match formatter.execute(&files, &tool_config) {
                 Ok(result) => {
+                    let issue_count = result.issues.len();
                     all_results.push(result);
+                    println!(
+                        "  ✅ {} completed with {} issues",
+                        formatter.name(),
+                        issue_count
+                    );
                 }
                 Err(err) => {
-                    if self.verbosity >= Verbosity::Normal {
-                        eprintln!("❌ Error running {}: {}", formatter.name(), err);
-                    }
+                    println!("  ❌ Error running {}: {}", formatter.name(), err);
                 }
             }
         }
@@ -292,7 +351,7 @@ where
             // Display summary
             let summary = self.output_formatter.format_summary(&all_results);
             println!("\n{}", summary);
-        } else if self.verbosity >= Verbosity::Normal {
+        } else {
             println!("✨ No formatting issues found!");
         }
 
@@ -302,37 +361,86 @@ where
     /// Run the fix command
     pub async fn fix(
         &self,
-        _args: FixArgs,
+        args: FixArgs,
         paths: Vec<PathBuf>,
         git_modified_only: bool,
     ) -> Result<(), SirenError> {
+        // First run the format command if requested
+        // By default, format is run as part of fix
+        if args.format {
+            if self.verbosity >= Verbosity::Normal {
+                println!("💅 Running format before fix...");
+            }
+
+            // Create FormatArgs without the check option
+            let format_args = FormatArgs {
+                check: false,
+                tools: args.tools.clone(),
+            };
+
+            // Run the format command
+            self.format(format_args, paths.clone(), git_modified_only)
+                .await?;
+        }
+
         // Load configuration
         let config = self.load_config(&paths)?;
 
         // Detect project information
         let project_info = self.detect_project(&paths)?;
 
-        if self.verbosity >= Verbosity::Normal {
-            // Display detected project info
+        // Always display detected project info if we didn't run format first
+        if !args.format {
             let info_output = self.output_formatter.format_detection(&project_info);
             println!("{}", info_output);
         }
 
+        // Print detected languages
+        println!(
+            "🔍 Looking for fixers for languages: {:?}",
+            project_info.languages
+        );
+
         // Select appropriate fixing tools
         let mut fixers = Vec::new();
         for language in &project_info.languages {
+            println!("  Looking for fixers for {:?}...", language);
             let language_fixers = self
                 .tool_registry
                 .get_tools_for_language_and_type(*language, ToolType::Fixer);
+
+            println!(
+                "  Found {} fixers for {:?}",
+                language_fixers.len(),
+                language
+            );
             for fixer in language_fixers {
+                println!(
+                    "    - {} (available: {})",
+                    fixer.name(),
+                    fixer.is_available()
+                );
                 fixers.push(fixer);
             }
         }
 
         if fixers.is_empty() {
-            if self.verbosity >= Verbosity::Normal {
-                println!("⚠️ No fixers found for the detected languages.");
+            println!("⚠️ No fixers found for the detected languages. Available tools:");
+
+            // Print all available tools to help debug
+            for language in &project_info.languages {
+                let all_tools = self.tool_registry.get_tools_for_language(*language);
+                println!("  Tools for {:?}:", language);
+                for tool in all_tools {
+                    println!(
+                        "    - {} ({:?}, available: {})",
+                        tool.name(),
+                        tool.tool_type(),
+                        tool.is_available()
+                    );
+                }
             }
+
             return Ok(());
         }
 
@@ -343,16 +451,34 @@ where
                 .map(|p| p.as_path())
                 .unwrap_or_else(|| Path::new("."));
             crate::utils::get_git_modified_files(dir)?
+        } else if paths.is_empty() {
+            // If no paths are specified, use the current directory
+            let current_dir = Path::new(".");
+            self.collect_files_with_gitignore(current_dir)?
         } else {
-            paths
+            // Expand directories to files
+            let mut all_files = Vec::new();
+
+            for path in &paths {
+                if path.is_dir() {
+                    let dir_files = self.collect_files_with_gitignore(path)?;
+                    all_files.extend(dir_files);
+                } else if path.is_file() {
+                    all_files.push(path.clone());
+                }
+            }
+
+            all_files
         };
 
-        if self.verbosity >= Verbosity::Normal {
-            println!(
-                "🧹 Fixing {} files with {} fixers...",
-                files.len(),
-                fixers.len()
-            );
+        println!("📂 Found {} files to fix:", files.len());
+        for file in &files {
+            println!("  - {}", file.display());
+        }
+
+        if files.is_empty() {
+            println!("⚠️ No files found to fix!");
+            return Ok(());
         }
 
         // Get default tool config
@@ -361,6 +487,12 @@ where
         // Execute fixers and collect results
         let mut all_results = Vec::new();
         for fixer in fixers {
+            // Skip tools that aren't available
+            if !fixer.is_available() {
+                println!("⚠️ Skipping unavailable fixer: {}", fixer.name());
+                continue;
+            }
+
             // Get tool-specific config or use default
             let config_tool_config = config
                 .tools
@@ -370,14 +502,19 @@ where
             let tool_config = convert_tool_config(&config_tool_config);
 
             // Execute the fixer
+            println!("🔧 Running fixer: {}", fixer.name());
             match fixer.execute(&files, &tool_config) {
                 Ok(result) => {
+                    let issue_count = result.issues.len();
                     all_results.push(result);
+                    println!(
+                        "  ✅ {} completed with {} issues fixed",
+                        fixer.name(),
+                        issue_count
+                    );
                 }
                 Err(err) => {
-                    if self.verbosity >= Verbosity::Normal {
-                        eprintln!("❌ Error running {}: {}", fixer.name(), err);
-                    }
+                    println!("  ❌ Error running {}: {}", fixer.name(), err);
                 }
             }
         }
@@ -392,7 +529,7 @@ where
             // Display summary
             let summary = self.output_formatter.format_summary(&all_results);
             println!("\n{}", summary);
-        } else if self.verbosity >= Verbosity::Normal {
+        } else {
             println!("✨ No issues to fix!");
         }
 
@@ -643,5 +780,6 @@ fn convert_tool_config(config: &ConfigToolConfig) -> ModelsToolConfig {
             .map(|p| p.to_string_lossy().to_string()),
         report_level: None,
         auto_fix: config.auto_fix.unwrap_or(false),
+        check: config.check.unwrap_or(false),
     }
 }

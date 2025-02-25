@@ -106,6 +106,10 @@ pub enum Commands {
     /// Auto-fix issues
     Fix(FixArgs),
 
+    /// Format code and auto-fix issues
+    #[command(visible_alias = "fmt-fix")]
+    FormatAndFix(FormatAndFixArgs),
+
     /// Detect languages and tools in a project
     Detect(DetectArgs),
 
@@ -169,6 +173,10 @@ pub struct FixArgs {
     /// Only fix specific tools
     #[arg(long)]
     pub tools: Option<Vec<String>>,
+
+    /// Run format before fixing
+    #[arg(long, default_value = "true")]
+    pub format: bool,
 }
 
 /// Arguments for the detect command
@@ -233,4 +241,20 @@ pub struct SuggestArgs {
     /// Maximum number of suggestions to show
     #[arg(short, long, default_value = "5")]
     pub max_suggestions: usize,
+}
+
+/// Arguments for the format-and-fix command
+#[derive(Args, Debug)]
+pub struct FormatAndFixArgs {
+    /// Allow potentially unsafe fixes
+    #[arg(long)]
+    pub unsafe_fixes: bool,
+
+    /// Only use specific tools
+    #[arg(long)]
+    pub tools: Option<Vec<String>>,
+
+    /// Check mode for format - don't write files, just check if they need formatting
+    #[arg(short = 'c', long)]
+    pub check_format: bool,
 }

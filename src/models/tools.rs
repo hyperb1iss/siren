@@ -46,6 +46,10 @@ pub struct ToolConfig {
     /// Whether to automatically fix issues (if tool supports it)
     #[serde(default)]
     pub auto_fix: bool,
+
+    /// Whether to run in check mode (don't modify files)
+    #[serde(default)]
+    pub check: bool,
 }
 
 fn default_enabled() -> bool {

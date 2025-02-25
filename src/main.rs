@@ -10,13 +10,13 @@ mod tools;
 mod utils;
 
 use clap::Parser;
-use cli::{Cli, Commands, Verbosity};
+use cli::{Cli, Commands, FixArgs, FormatArgs, Verbosity};
 use errors::SirenError;
 
 #[tokio::main]
 async fn main() -> Result<(), SirenError> {
     // This variable should be flagged by clippy as unused
-    let unused_var = "This is unused";
+    let _unused_var = "This is unused";
 
     // Initialize logger
     env_logger::init();
@@ -62,6 +62,24 @@ async fn main() -> Result<(), SirenError> {
         }
         Commands::Fix(args) => {
             app.fix(args, cli.paths, cli.git_modified).await?;
+        }
+        Commands::FormatAndFix(args) => {
+            // First run format
+            let format_args = FormatArgs {
+                check: args.check_format,
+                tools: args.tools.clone(),
+            };
+            app.format(format_args, cli.paths.clone(), cli.git_modified)
+                .await?;
+
+            // Then run fix
+            let fix_args = FixArgs {
+                unsafe_fixes: args.unsafe_fixes,
+                tools: args.tools,
+                // Don't format again since we just did it
+                format: false,
+            };
+            app.fix(fix_args, cli.paths, cli.git_modified).await?;
         }
         Commands::Detect(args) => {
             app.detect(args, cli.paths)?;

@@ -88,6 +88,9 @@ pub struct ToolConfig {
 
     /// Whether to automatically fix issues
     pub auto_fix: Option<bool>,
+
+    /// Whether to run in check mode (don't modify files)
+    pub check: Option<bool>,
 }
 
 impl Default for ToolConfig {
@@ -97,6 +100,7 @@ impl Default for ToolConfig {
             extra_args: None,
             config_file: None,
             auto_fix: None,
+            check: None,
         }
     }
 }

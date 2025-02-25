@@ -35,8 +35,13 @@ impl Rustfmt {
         file: &Path,
         config: &ModelsToolConfig,
     ) -> Result<Vec<LintIssue>, ToolError> {
-        let mut command = Command::new("rustfmt");
-        command.arg("--check");
+        // Get the project root directory (assuming it contains a Cargo.toml)
+        let project_root = self.find_cargo_toml_dir(file)?;
+
+        // Build cargo fmt command
+        let mut command = Command::new("cargo");
+        command.current_dir(&project_root);
+        command.args(["fmt", "--", "--check"]);
 
         // Add custom config file if specified
         if let Some(config_file) = &config.executable_path {
@@ -48,13 +53,17 @@ impl Rustfmt {
             command.arg(arg);
         }
 
-        // Add the file to format
-        command.arg(file);
+        // Add the file to format (as a relative path from project root)
+        if let Some(rel_path) = pathdiff::diff_paths(file, &project_root) {
+            command.arg(rel_path);
+        } else {
+            command.arg(file);
+        }
 
         // Run the command
         let output = command.output().map_err(|e| ToolError::ExecutionFailed {
             name: self.name().to_string(),
-            message: format!("Failed to execute rustfmt: {}", e),
+            message: format!("Failed to execute cargo fmt: {}", e),
         })?;
 
         // Parse the output
@@ -76,8 +85,14 @@ impl Rustfmt {
     }
 
     /// Fix formatting issues with rustfmt
-    fn _fix_file(&self, file: &Path, config: &ModelsToolConfig) -> Result<(), ToolError> {
-        let mut command = Command::new("rustfmt");
+    fn fix_file(&self, file: &Path, config: &ModelsToolConfig) -> Result<(), ToolError> {
+        // Get the project root directory (assuming it contains a Cargo.toml)
+        let project_root = self.find_cargo_toml_dir(file)?;
+
+        // Build cargo fmt command
+        let mut command = Command::new("cargo");
+        command.current_dir(&project_root);
+        command.args(["fmt", "--"]);
 
         // Add custom config file if specified
         if let Some(config_file) = &config.executable_path {
@@ -89,13 +104,17 @@ impl Rustfmt {
             command.arg(arg);
         }
 
-        // Add the file to format
-        command.arg(file);
+        // Add the file to format (as a relative path from project root)
+        if let Some(rel_path) = pathdiff::diff_paths(file, &project_root) {
+            command.arg(rel_path);
+        } else {
+            command.arg(file);
+        }
 
         // Run the command
         let output = command.output().map_err(|e| ToolError::ExecutionFailed {
             name: self.name().to_string(),
-            message: format!("Failed to execute rustfmt: {}", e),
+            message: format!("Failed to execute cargo fmt: {}", e),
         })?;
 
         // Check result
@@ -108,6 +127,30 @@ impl Rustfmt {
         }
 
         Ok(())
+    }
+
+    /// Find the directory containing Cargo.toml by walking up the directory tree
+    fn find_cargo_toml_dir(&self, file_path: &Path) -> Result<PathBuf, ToolError> {
+        let file_dir = if file_path.is_file() {
+            file_path.parent().unwrap_or(Path::new("."))
+        } else {
+            file_path
+        };
+
+        let mut current_dir = Some(file_dir.to_path_buf());
+
+        while let Some(dir) = current_dir {
+            let cargo_toml = dir.join("Cargo.toml");
+            if cargo_toml.exists() {
+                return Ok(dir);
+            }
+
+            // Move up to parent directory
+            current_dir = dir.parent().map(|p| p.to_path_buf());
+        }
+
+        // If we can't find a Cargo.toml, use the current directory
+        Ok(PathBuf::from("."))
     }
 }
 
@@ -165,16 +208,37 @@ impl LintTool for Rustfmt {
                 continue;
             }
 
-            // Check if file needs formatting
-            match self.check_file(file, config) {
-                Ok(issues) => {
-                    if !issues.is_empty() {
-                        success = false;
-                        all_issues.extend(issues);
+            if config.check {
+                // Check mode - just check if files need formatting
+                match self.check_file(file, config) {
+                    Ok(issues) => {
+                        if !issues.is_empty() {
+                            success = false;
+                            all_issues.extend(issues);
+                        }
+                    }
+                    Err(e) => {
+                        return Err(e);
                     }
                 }
-                Err(e) => {
-                    return Err(e);
+            } else {
+                // Format mode - actually format the files
+                match self.fix_file(file, config) {
+                    Ok(()) => {
+                        // Successfully formatted
+                    }
+                    Err(e) => {
+                        success = false;
+                        all_issues.push(LintIssue {
+                            severity: IssueSeverity::Error,
+                            message: format!("Failed to format file: {}", e),
+                            file: Some(file.to_path_buf()),
+                            line: None,
+                            column: None,
+                            code: None,
+                            fix_available: false,
+                        });
+                    }
                 }
             }
         }
@@ -213,12 +277,16 @@ impl LintTool for Rustfmt {
     }
 
     fn is_available(&self) -> bool {
-        utils::command_exists("rustfmt")
+        // Check if cargo fmt is available instead of standalone rustfmt
+        utils::command_exists("cargo")
     }
 
     fn version(&self) -> Option<String> {
-        // Run rustfmt --version
-        let output = Command::new("rustfmt").arg("--version").output().ok()?;
+        // Run cargo fmt --version
+        let output = Command::new("cargo")
+            .args(["fmt", "--version"])
+            .output()
+            .ok()?;
 
         if output.status.success() {
             // Parse the version from output
