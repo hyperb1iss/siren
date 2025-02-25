@@ -1,6 +1,6 @@
 # 🧜‍♀️ SIREN ✨
 
-> _Enchanting code quality with irresistible standards_
+> _Elevating code quality with smart standards_
 
 [![Status](https://img.shields.io/badge/status-in_development-blue?logo=github&logoColor=white)](https://github.com/hyperb1iss/siren)
 [![Language](https://img.shields.io/badge/built_with-Rust-orange?logo=rust)](https://www.rust-lang.org/)
@@ -8,19 +8,19 @@
 [![Tools](https://img.shields.io/badge/supported_tools-30%2B-purple?logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjIiPjxwYXRoIGQ9Ik0xMiAyQzYuNDggMiAyIDYuNDggMiAxMnM0LjQ4IDEwIDEwIDEwIDEwLTQuNDggMTAtMTBTMTcuNTIgMiAxMiAyem0xIDE1aC0ydi0yaDJ2MnptMC00aC0yVjdoMnY2eiIvPjwvc3ZnPg==)](README.md#-supported-languages--tools)
 [![Languages](https://img.shields.io/badge/languages-7%2B-green?logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjIiPjxwYXRoIGQ9Ik0xMCAyMGw0LTE2bTQgMTJsNy03LTctN00zIDE2bDctNy03LTciLz48L3N2Zz4=)](README.md#-supported-languages--tools)
 
-Siren is a bewitching frontend for multiple linting tools that makes maintaining code quality a delightful experience. Like the mythological sirens that lured sailors with their enchanting voices, Siren entices developers with beautiful output, smart defaults, and an intuitive interface - making code quality standards impossible to resist.
+Siren is a powerful frontend for multiple linting tools that makes maintaining code quality a delightful experience. Inspired by the mythological sirens, Siren draws developers in with beautiful output, smart defaults, and an intuitive interface - making code quality standards easy to adopt.
 
 <p align="center">
   <img src="https://via.placeholder.com/800x300/4B0082/FFFFFF?text=SIREN+Demo+Screenshot" alt="Siren Demo" />
 </p>
 
-## ✨ Core Enchantments
+## ✨ Core Features
 
 - 🌈 **Multi-language Support** - Seamlessly works with major programming languages
 - 🔍 **Framework Detection** - Automatically identifies project types and frameworks
 - 🧙‍♀️ **Smart Tool Selection** - Chooses the right linters based on detected technologies
 - 🪄 **Unified Interface** - One command to rule all your linting needs
-- 💅 **Beautiful Output** - Colorful, clear, and captivating terminal display
+- 💅 **Beautiful Output** - Colorful, clear, and informative terminal display
 - ⚙️ **Configuration Flexibility** - Smart defaults with extensive customization options
 - ⚡ **High Performance** - Lightning-fast execution with Rust's efficiency
 - 🔧 **Auto-fixing** - Automatically resolves common issues when possible
@@ -85,13 +85,13 @@ Siren supports a growing collection of languages and tools, automatically select
 | Ruby                    | `rubocop`               | `rubocop`              | `sorbet`      | `rubocop -a`          |
 | _and more coming soon!_ |
 
-## 💅 Enchanting CLI Experience
+## 💅 Vibrant CLI Experience
 
 <p align="center">
   <img src="https://via.placeholder.com/750x400/800080/FFFFFF?text=Siren+CLI+Demo" alt="Siren CLI Demo" />
 </p>
 
-Siren's CLI is designed to be a feast for the eyes while providing clear, actionable information:
+Siren's CLI is designed to be visually appealing while providing clear, actionable information:
 
 ```
 $ siren
@@ -154,13 +154,13 @@ $ siren
 
 ## ⚙️ Configuration: Opinionated But Flexible
 
-Siren believes in "convention over configuration" but respects your individuality.
+Siren believes in "convention over configuration" but respects your preferences.
 
 ### Philosophy
 
-- **Works Magically Out-of-box** - Zero config needed for common projects
+- **Works Out-of-box** - Zero config needed for common projects
 - **Progressive Configuration** - Add settings only when you need to customize
-- **Sensible Opinions** - We make the hard choices so you don't have to
+- **Sensible Defaults** - We make the hard choices so you don't have to
 - **Override Anything** - But you can always do it your way
 
 ### Configuration File
@@ -204,7 +204,7 @@ Siren intelligently looks for configuration in multiple places (in order of prec
 
 ## 💎 Advanced Use Cases
 
-### The Enchanted Developer
+### For Developers
 
 ```bash
 # Format your code beautifully across all languages
@@ -223,7 +223,7 @@ $ siren fix core/templates "**/*.html"
 $ siren format fix --git-modified
 ```
 
-### The Discerning Team Lead
+### For Team Leads
 
 ```bash
 # Run comprehensive checks before a release
@@ -239,7 +239,7 @@ $ siren check --ci --fail-level=error
 $ siren init --team
 ```
 
-### The Curious Newcomer
+### For Newcomers
 
 ```bash
 # See what Siren detects in your project
@@ -282,12 +282,12 @@ steps:
 
 ## 🤝 Contributing
 
-Contributions are what make the open source community such a magical place! Any contributions you make are **greatly appreciated**.
+Contributions are what make the open source community such a vibrant place! Any contributions you make are **greatly appreciated**.
 
 1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingEnchantment`)
-3. Commit your changes (`git commit -m 'Add some AmazingEnchantment'`)
-4. Push to the branch (`git push origin feature/AmazingEnchantment`)
+2. Create your feature branch (`git checkout -b feature/AwesomeFeature`)
+3. Commit your changes (`git commit -m 'Add some AwesomeFeature'`)
+4. Push to the branch (`git push origin feature/AwesomeFeature`)
 5. Open a Pull Request
 
 See our [Contributing Guidelines](CONTRIBUTING.md) for more information.
@@ -302,6 +302,6 @@ This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENS
 
 Created by [Stefanie Jane 🌠](https://github.com/hyperb1iss)
 
-If you find Siren useful, [buy me a Monster Ultra Violet](https://ko-fi.com/hyperb1iss)! ⚡️
+If you find Siren useful, [buy me a coffee](https://ko-fi.com/hyperb1iss)! ☕
 
 </div>
