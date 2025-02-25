@@ -1,0 +1,62 @@
+[package]
+name = "siren"
+version = "0.1.0"
+edition = "2021"
+authors = ["Siren Team"]
+description = "🧜‍♀️ Siren - Enchanting code quality with irresistible standards"
+readme = "README.md"
+license = "Apache-2.0"
+repository = "https://github.com/hyperb1iss/siren"
+keywords = ["linter", "formatter", "quality", "tool", "cli"]
+categories = ["command-line-utilities", "development-tools"]
+
+[dependencies]
+# CLI parsing
+clap = { version = "4.4", features = ["derive"] }
+
+# Async runtime
+tokio = { version = "1.36", features = ["full"] }
+futures = "0.3"  # For future combinators
+
+# Error handling
+thiserror = "2.0.11"
+anyhow = "1.0"
+
+# Serialization & configuration
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"  # For JSON output formatting
+toml = "0.8"
+
+# Filesystem operations
+walkdir = "2.4"
+globset = "0.4"
+ignore = "0.4"
+pathdiff = "0.2"  # For relative path calculations
+
+# Terminal UI and formatting
+colored = "3.0.0"
+console = "0.15"
+indicatif = "0.17" 
+dialoguer = "0.11"
+
+# Regular expressions
+regex = "1.10"
+
+# Logging
+log = "0.4"
+env_logger = "0.11"
+
+# Utilities
+which = "7.0.2"         # For finding executables in PATH
+once_cell = "1.19"    # For lazy statics
+rayon = "1.8"         # For parallel iterators
+derive_more = { version = "2.0.1", features = ["full"] } # For derive macros
+strum = { version = "0.27.1", features = ["derive"] } # For enum utilities
+strum_macros = "0.27.1"
+enum-iterator = "2.0.0"  # For iterating over enum variants
+
+[dev-dependencies]
+tempfile = "3.8"       # For temporary test directories
+pretty_assertions = "1.4" # For better test failure outputs
+mockall = "0.13.1"       # For mocking in tests
+rstest = "0.24.0"        # For parameterized tests
