@@ -211,14 +211,11 @@ fn file_exists_recursive(dir: &Path, filename: &str, max_depth: usize) -> bool {
         Err(_) => return false,
     };
 
-    for entry in dir_entries {
-        if let Ok(entry) = entry {
-            let path = entry.path();
-            if path.is_file() && path.file_name().and_then(|f| f.to_str()) == Some(filename) {
-                return true;
-            } else if path.is_dir() && file_exists_recursive(&path, filename, max_depth - 1) {
-                return true;
-            }
+    for entry in dir_entries.flatten() {
+        let path = entry.path();
+        if (path.is_file() && path.file_name().and_then(|f| f.to_str()) == Some(filename)) ||
+           (path.is_dir() && file_exists_recursive(&path, filename, max_depth - 1)) {
+            return true;
         }
     }
 

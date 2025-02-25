@@ -17,6 +17,7 @@ use tools::ToolRegistry;
 #[tokio::main]
 async fn main() -> Result<(), SirenError> {
     // This variable should be flagged by clippy as unused
+    #[allow(unused_variables)]
     let _unused_var = "This is unused";
 
     // Initialize logger
@@ -244,7 +245,7 @@ async fn main() -> Result<(), SirenError> {
                     
                     // Output tools grouped by language
                     for &language in &languages {
-                        let tools = &by_language[&language];
+                        let tools = &by_language[language];
                         
                         println!("\n📦 {:?}:", language);
                         
