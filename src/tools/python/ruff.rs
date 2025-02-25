@@ -81,33 +81,49 @@ impl Ruff {
         issues
     }
 
-    /// Run ruff on a file to check for issues
-    fn check_file(
+    /// Run ruff on multiple files to check for issues
+    fn check_files(
         &self,
-        file: &Path,
+        files: &[PathBuf],
         config: &ModelsToolConfig,
-    ) -> Result<Vec<LintIssue>, ToolError> {
+    ) -> Result<(Vec<LintIssue>, String, String), ToolError> {
+        // Skip if no files can be handled
+        let files_to_check: Vec<&Path> = files
+            .iter()
+            .filter(|file| self.can_handle(file))
+            .map(|file| file.as_path())
+            .collect();
+
+        if files_to_check.is_empty() {
+            return Ok((Vec::new(), String::new(), String::new()));
+        }
+
         let mut command = Command::new("ruff");
         command.arg("check");
 
-        // Add line length if specified in extra args
-        // Look for --line-length in extra_args
-        let has_line_length = config
-            .extra_args
-            .iter()
-            .any(|arg| arg.starts_with("--line-length"));
-        if !has_line_length {
-            // Default line length for ruff
-            command.arg("--line-length").arg("88");
-        }
+        // Set default line length to 88
+        let mut has_line_length = false;
 
         // Add extra arguments
         for arg in &config.extra_args {
+            if arg.starts_with("--line-length") {
+                has_line_length = true;
+            }
             command.arg(arg);
         }
 
-        // Add the file to check
-        command.arg(file);
+        // Add default line length if not specified
+        if !has_line_length {
+            command.arg("--line-length=88");
+        }
+
+        // Add output format
+        command.arg("--output-format=full");
+
+        // Add all the files to check
+        for file in files_to_check {
+            command.arg(file);
+        }
 
         // Run the command
         let output = command.output().map_err(|e| ToolError::ExecutionFailed {
@@ -117,13 +133,77 @@ impl Ruff {
 
         // Parse the output
         let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
         let issues = self.parse_output(&stdout);
 
-        Ok(issues)
+        Ok((issues, stdout, stderr))
+    }
+
+    /// Run ruff on multiple files to fix issues
+    fn fix_files(
+        &self,
+        files: &[PathBuf],
+        config: &ModelsToolConfig,
+    ) -> Result<(String, String), ToolError> {
+        // Skip if no files can be handled
+        let files_to_check: Vec<&Path> = files
+            .iter()
+            .filter(|file| self.can_handle(file))
+            .map(|file| file.as_path())
+            .collect();
+
+        if files_to_check.is_empty() {
+            return Ok((String::new(), String::new()));
+        }
+
+        let mut command = Command::new("ruff");
+        command.arg("check");
+        command.arg("--fix");
+
+        // Set default line length to 88
+        let mut has_line_length = false;
+
+        // Add extra arguments
+        for arg in &config.extra_args {
+            if arg.starts_with("--line-length") {
+                has_line_length = true;
+            }
+            command.arg(arg);
+        }
+
+        // Add default line length if not specified
+        if !has_line_length {
+            command.arg("--line-length=88");
+        }
+
+        // Add output format
+        command.arg("--output-format=full");
+
+        // Add all the files to fix
+        for file in files_to_check {
+            command.arg(file);
+        }
+
+        // Run the command
+        let output = command.output().map_err(|e| ToolError::ExecutionFailed {
+            name: self.name().to_string(),
+            message: format!("Failed to execute ruff: {}", e),
+        })?;
+
+        // Parse the output
+        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+        Ok((stdout, stderr))
     }
 
     /// Fix issues with ruff
-    fn fix_file(&self, file: &Path, config: &ModelsToolConfig) -> Result<(), ToolError> {
+    fn fix_file(
+        &self,
+        file: &Path,
+        config: &ModelsToolConfig,
+    ) -> Result<(String, String), ToolError> {
         let mut command = Command::new("ruff");
         command.arg("check");
         command.arg("--fix");
@@ -153,14 +233,17 @@ impl Ruff {
             message: format!("Failed to execute ruff: {}", e),
         })?;
 
+        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
         if !output.status.success() {
             return Err(ToolError::ExecutionFailed {
                 name: self.name().to_string(),
-                message: String::from_utf8_lossy(&output.stderr).to_string(),
+                message: stderr.clone(),
             });
         }
 
-        Ok(())
+        Ok((stdout, stderr))
     }
 }
 
@@ -183,32 +266,38 @@ impl LintTool for Ruff {
         config: &ModelsToolConfig,
     ) -> Result<LintResult, ToolError> {
         let start = Instant::now();
-        let mut issues = Vec::new();
 
         // Check if we should fix issues
         let fix_mode = config.auto_fix;
 
-        // Process each file
-        for file in files {
-            if !self.can_handle(file) {
-                continue;
-            }
+        let (issues, stdout, stderr) = if fix_mode {
+            // Fix all files in one go
+            let (fix_stdout, fix_stderr) = self.fix_files(files, config)?;
+            // After fixing, run check to get remaining issues
+            let (check_issues, check_stdout, check_stderr) = self.check_files(files, config)?;
 
-            if fix_mode {
-                // Fix the file
-                self.fix_file(file, config)?
+            // Combine stdout and stderr
+            let combined_stdout = if fix_stdout.is_empty() {
+                check_stdout
+            } else if check_stdout.is_empty() {
+                fix_stdout
             } else {
-                // Check the file
-                match self.check_file(file, config) {
-                    Ok(file_issues) => {
-                        issues.extend(file_issues);
-                    }
-                    Err(e) => {
-                        return Err(e);
-                    }
-                }
-            }
-        }
+                format!("{}\n\n{}", fix_stdout, check_stdout)
+            };
+
+            let combined_stderr = if fix_stderr.is_empty() {
+                check_stderr
+            } else if check_stderr.is_empty() {
+                fix_stderr
+            } else {
+                format!("{}\n\n{}", fix_stderr, check_stderr)
+            };
+
+            (check_issues, combined_stdout, combined_stderr)
+        } else {
+            // Just check all files in one go
+            self.check_files(files, config)?
+        };
 
         let execution_time = start.elapsed();
 
@@ -222,11 +311,19 @@ impl LintTool for Ruff {
                 version: self.version(),
                 description: self.description().to_string(),
             }),
-            success: issues.is_empty(),
+            success: true, // Tool executed successfully even if issues were found
             issues,
             execution_time,
-            stdout: None,
-            stderr: None,
+            stdout: if stdout.is_empty() {
+                None
+            } else {
+                Some(stdout)
+            },
+            stderr: if stderr.is_empty() {
+                None
+            } else {
+                Some(stderr)
+            },
         })
     }
 

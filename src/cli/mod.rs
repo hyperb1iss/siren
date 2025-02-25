@@ -128,7 +128,7 @@ pub enum Commands {
 }
 
 /// Arguments for the check command
-#[derive(Args, Debug)]
+#[derive(Args, Debug, Clone)]
 pub struct CheckArgs {
     /// Strict mode - stricter rules
     #[arg(short, long)]
@@ -156,7 +156,7 @@ pub struct CheckArgs {
 }
 
 /// Arguments for the format command
-#[derive(Args, Debug)]
+#[derive(Args, Debug, Clone)]
 pub struct FormatArgs {
     /// Check mode - don't write files, just check if they need formatting
     #[arg(short, long)]
@@ -172,7 +172,7 @@ pub struct FormatArgs {
 }
 
 /// Arguments for the fix command
-#[derive(Args, Debug)]
+#[derive(Args, Debug, Clone)]
 pub struct FixArgs {
     /// Allow potentially unsafe fixes
     #[arg(long)]
@@ -192,7 +192,7 @@ pub struct FixArgs {
 }
 
 /// Arguments for the detect command
-#[derive(Args, Debug)]
+#[derive(Args, Debug, Clone)]
 pub struct DetectArgs {
     /// Maximum directory depth to scan
     #[arg(long, default_value = "5")]
@@ -208,7 +208,7 @@ pub struct DetectArgs {
 }
 
 /// Arguments for the init command
-#[derive(Args, Debug)]
+#[derive(Args, Debug, Clone)]
 pub struct InitArgs {
     /// Create a configuration file for a team
     #[arg(long)]
@@ -220,7 +220,7 @@ pub struct InitArgs {
 }
 
 /// Arguments for the list-tools command
-#[derive(Args, Debug)]
+#[derive(Args, Debug, Clone)]
 pub struct ListToolsArgs {
     /// Filter by language
     #[arg(short, long)]
@@ -240,7 +240,7 @@ pub struct ListToolsArgs {
 }
 
 /// Arguments for the report command
-#[derive(Args, Debug)]
+#[derive(Args, Debug, Clone)]
 pub struct ReportArgs {
     /// Output format (html, json, markdown)
     #[arg(short, long, default_value = "html")]
@@ -252,7 +252,7 @@ pub struct ReportArgs {
 }
 
 /// Arguments for the suggest command
-#[derive(Args, Debug)]
+#[derive(Args, Debug, Clone)]
 pub struct SuggestArgs {
     /// Maximum number of suggestions to show
     #[arg(short, long, default_value = "5")]
@@ -260,7 +260,7 @@ pub struct SuggestArgs {
 }
 
 /// Arguments for the format-and-fix command
-#[derive(Args, Debug)]
+#[derive(Args, Debug, Clone)]
 pub struct FormatAndFixArgs {
     /// Allow potentially unsafe fixes
     #[arg(long)]

@@ -45,14 +45,16 @@ async fn main() -> Result<(), SirenError> {
     let tool_registry = tools::DefaultToolRegistry::with_default_tools();
 
     // Debug print all tools to help diagnose issues
-    eprintln!("DEBUG: All tools registered in main.rs:");
-    for tool in tool_registry.get_all_tools() {
-        eprintln!(
-            "DEBUG:   - {} ({:?}) - Available: {}",
-            tool.name(),
-            tool.language(),
-            tool.is_available()
-        );
+    if verbosity >= Verbosity::Verbose {
+        eprintln!("DEBUG: All tools registered in main.rs:");
+        for tool in tool_registry.get_all_tools() {
+            eprintln!(
+                "DEBUG:   - {} ({:?}) - Available: {}",
+                tool.name(),
+                tool.language(),
+                tool.is_available()
+            );
+        }
     }
 
     let output_formatter = output::PrettyFormatter::new();
@@ -94,41 +96,74 @@ async fn main() -> Result<(), SirenError> {
             let cmd_expanded_paths = utils::expand_glob_patterns(&base_dir, &args.paths);
             args.paths = cmd_expanded_paths;
 
+            // Only print debug info if verbosity is high enough
+            if verbosity >= Verbosity::Verbose {
+                // Print all tools to help diagnose issues
+                eprintln!("All tools registered:");
+                for tool in tool_registry.get_all_tools() {
+                    eprintln!(
+                        "  - {} ({:?}) - Available: {}",
+                        tool.name(),
+                        tool.language(),
+                        tool.is_available()
+                    );
+                }
+            }
+
             if let Err(e) = app.check(args, expanded_paths, cli.git_modified).await {
                 print_friendly_error(&e, verbosity);
                 std::process::exit(1);
             }
         }
-        Commands::Format(mut args) => {
+        Commands::Format(mut format_args) => {
             // Also expand any glob patterns in command-specific paths
-            let cmd_expanded_paths = utils::expand_glob_patterns(&base_dir, &args.paths);
-            args.paths = cmd_expanded_paths;
+            let cmd_expanded_paths = utils::expand_glob_patterns(&base_dir, &format_args.paths);
+            format_args.paths = cmd_expanded_paths;
 
-            if let Err(e) = app.format(args, expanded_paths, cli.git_modified).await {
+            // Create a copy of format_args for the function call
+            let args_copy = cli::FormatArgs {
+                check: format_args.check,
+                tools: format_args.tools.clone(),
+                paths: format_args.paths.clone(),
+            };
+
+            if let Err(e) = app
+                .format(args_copy, expanded_paths, cli.git_modified)
+                .await
+            {
                 print_friendly_error(&e, verbosity);
                 std::process::exit(1);
             }
         }
-        Commands::Fix(mut args) => {
+        Commands::Fix(mut fix_args) => {
             // Also expand any glob patterns in command-specific paths
-            let cmd_expanded_paths = utils::expand_glob_patterns(&base_dir, &args.paths);
-            args.paths = cmd_expanded_paths;
+            let cmd_expanded_paths = utils::expand_glob_patterns(&base_dir, &fix_args.paths);
+            fix_args.paths = cmd_expanded_paths;
 
-            if let Err(e) = app.fix(args, expanded_paths, cli.git_modified).await {
+            // Create a copy of fix_args for the function call
+            let args_copy = cli::FixArgs {
+                unsafe_fixes: fix_args.unsafe_fixes,
+                tools: fix_args.tools.clone(),
+                format: fix_args.format,
+                paths: fix_args.paths.clone(),
+            };
+
+            if let Err(e) = app.fix(args_copy, expanded_paths, cli.git_modified).await {
                 print_friendly_error(&e, verbosity);
                 std::process::exit(1);
             }
         }
-        Commands::FormatAndFix(mut args) => {
+        Commands::FormatAndFix(mut format_and_fix_args) => {
             // Also expand any glob patterns in command-specific paths
-            let cmd_expanded_paths = utils::expand_glob_patterns(&base_dir, &args.paths);
-            args.paths = cmd_expanded_paths.clone();
+            let cmd_expanded_paths =
+                utils::expand_glob_patterns(&base_dir, &format_and_fix_args.paths);
+            format_and_fix_args.paths = cmd_expanded_paths.clone();
 
             // First run format
             let format_args = FormatArgs {
-                check: args.check_format,
-                tools: args.tools.clone(),
-                paths: args.paths.clone(),
+                check: format_and_fix_args.check_format,
+                tools: format_and_fix_args.tools.clone(),
+                paths: format_and_fix_args.paths.clone(),
             };
 
             if let Err(e) = app
@@ -141,11 +176,11 @@ async fn main() -> Result<(), SirenError> {
 
             // Then run fix
             let fix_args = FixArgs {
-                unsafe_fixes: args.unsafe_fixes,
-                tools: args.tools,
+                unsafe_fixes: format_and_fix_args.unsafe_fixes,
+                tools: format_and_fix_args.tools,
                 // Don't format again since we just did it
                 format: false,
-                paths: args.paths,
+                paths: format_and_fix_args.paths,
             };
 
             if let Err(e) = app.fix(fix_args, expanded_paths, cli.git_modified).await {
@@ -153,12 +188,12 @@ async fn main() -> Result<(), SirenError> {
                 std::process::exit(1);
             }
         }
-        Commands::Detect(mut args) => {
+        Commands::Detect(mut detect_args) => {
             // Also expand any glob patterns in command-specific paths
-            let cmd_expanded_paths = utils::expand_glob_patterns(&base_dir, &args.paths);
-            args.paths = cmd_expanded_paths;
+            let cmd_expanded_paths = utils::expand_glob_patterns(&base_dir, &detect_args.paths);
+            detect_args.paths = cmd_expanded_paths;
 
-            if let Err(e) = app.detect(args, expanded_paths) {
+            if let Err(e) = app.detect(detect_args, expanded_paths) {
                 print_friendly_error(&e, verbosity);
                 std::process::exit(1);
             }

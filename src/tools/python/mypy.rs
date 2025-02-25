@@ -76,12 +76,23 @@ impl MyPy {
         issues
     }
 
-    /// Run mypy on a file to check for issues
-    fn check_file(
+    /// Run mypy on multiple files to check for issues
+    fn check_files(
         &self,
-        file: &Path,
+        files: &[PathBuf],
         config: &ModelsToolConfig,
-    ) -> Result<Vec<LintIssue>, ToolError> {
+    ) -> Result<(Vec<LintIssue>, String, String), ToolError> {
+        // Skip if no files can be handled
+        let files_to_check: Vec<&Path> = files
+            .iter()
+            .filter(|file| self.can_handle(file))
+            .map(|file| file.as_path())
+            .collect();
+
+        if files_to_check.is_empty() {
+            return Ok((Vec::new(), String::new(), String::new()));
+        }
+
         let mut command = Command::new("mypy");
 
         // Add common flags
@@ -93,8 +104,10 @@ impl MyPy {
             command.arg(arg);
         }
 
-        // Add the file to check
-        command.arg(file);
+        // Add all the files to check
+        for file in files_to_check {
+            command.arg(file);
+        }
 
         // Run the command
         let output = command.output().map_err(|e| ToolError::ExecutionFailed {
@@ -107,10 +120,10 @@ impl MyPy {
         let stderr = String::from_utf8_lossy(&output.stderr).to_string();
 
         // MyPy can output to either stdout or stderr depending on the version
-        let combined_output = format!("{}\n{}", stdout, stderr);
+        let combined_output = format!("{}\n{}", stdout, stderr).trim().to_string();
         let issues = self.parse_output(&combined_output);
 
-        Ok(issues)
+        Ok((issues, stdout, stderr))
     }
 }
 
@@ -133,24 +146,9 @@ impl LintTool for MyPy {
         config: &ModelsToolConfig,
     ) -> Result<LintResult, ToolError> {
         let start = Instant::now();
-        let mut issues = Vec::new();
 
-        // Process each file
-        for file in files {
-            if !self.can_handle(file) {
-                continue;
-            }
-
-            // Check the file
-            match self.check_file(file, config) {
-                Ok(file_issues) => {
-                    issues.extend(file_issues);
-                }
-                Err(e) => {
-                    return Err(e);
-                }
-            }
-        }
+        // Run mypy once for all files
+        let (issues, stdout, stderr) = self.check_files(files, config)?;
 
         let execution_time = start.elapsed();
 
@@ -164,11 +162,19 @@ impl LintTool for MyPy {
                 version: self.version(),
                 description: self.description().to_string(),
             }),
-            success: issues.is_empty(),
+            success: true, // Tool executed successfully even if issues were found
             issues,
             execution_time,
-            stdout: None,
-            stderr: None,
+            stdout: if stdout.is_empty() {
+                None
+            } else {
+                Some(stdout)
+            },
+            stderr: if stderr.is_empty() {
+                None
+            } else {
+                Some(stderr)
+            },
         })
     }
 

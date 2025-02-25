@@ -34,61 +34,87 @@ impl PyLint {
     fn parse_output(&self, output: &str) -> Vec<LintIssue> {
         let mut issues = Vec::new();
 
-        // Regex to match PyLint output format
-        // Format: file:line:column: [code] message
-        let regex =
-            Regex::new(r"(?m)^(.+):(\d+):(\d+):\s+\[(\w+)(?:\((\w+)\))?\]\s+(.+)$").unwrap();
+        // Track current module and file for module-level patterns
+        let mut current_module: Option<String> = None;
 
-        for capture in regex.captures_iter(output) {
-            let file_str = capture.get(1).unwrap().as_str();
-            let line = capture
-                .get(2)
-                .unwrap()
-                .as_str()
-                .parse::<usize>()
-                .unwrap_or(0);
-            let column = capture
-                .get(3)
-                .unwrap()
-                .as_str()
-                .parse::<usize>()
-                .unwrap_or(0);
-            let code_type = capture.get(4).unwrap().as_str();
-            let code = capture.get(5).map(|m| m.as_str().to_string());
-            let message = capture.get(6).unwrap().as_str();
+        // Pattern for module headers
+        let module_regex = Regex::new(r"(?m)^\*+\s+Module\s+(\w+)").unwrap();
 
-            // Determine severity based on code type
-            let severity = match code_type {
-                "E" | "F" => IssueSeverity::Error,
-                "W" => IssueSeverity::Warning,
-                "C" => IssueSeverity::Style,
-                "R" => IssueSeverity::Info,
-                _ => IssueSeverity::Warning,
-            };
+        // Primary pattern for pylint issues
+        // Format: "incidents.py:1:0: C0114: Missing module docstring (missing-module-docstring)"
+        let issue_regex =
+            Regex::new(r"(?m)^([^:]+):(\d+):(\d+): ([A-Z]\d+): (.+?) \(([^)]+)\)").unwrap();
 
-            // Create a PathBuf for the file
-            let file_path = PathBuf::from(file_str);
+        // Process line by line
+        for line in output.lines() {
+            // Skip empty lines
+            if line.trim().is_empty() {
+                continue;
+            }
 
-            issues.push(LintIssue {
-                severity,
-                message: message.to_string(),
-                file: Some(file_path),
-                line: Some(line),
-                column: Some(column),
-                code: code.map(|c| format!("{}({})", code_type, c)),
-                fix_available: false, // PyLint doesn't provide auto-fixes
-            });
+            // Check for module header
+            if let Some(cap) = module_regex.captures(line) {
+                current_module = Some(cap[1].to_string());
+                continue;
+            }
+
+            // Try to match issue pattern
+            if let Some(cap) = issue_regex.captures(line) {
+                let file_str = cap.get(1).unwrap().as_str();
+                let line_num = cap.get(2).unwrap().as_str().parse::<usize>().unwrap_or(0);
+                let column = cap.get(3).unwrap().as_str().parse::<usize>().unwrap_or(0);
+                let code = cap.get(4).map(|m| m.as_str().to_string());
+                let message = cap.get(5).unwrap().as_str();
+                let error_type = cap.get(6).unwrap().as_str();
+
+                // Determine severity based on code first letter
+                let severity = if let Some(code_str) = &code {
+                    match code_str.chars().next() {
+                        Some('E') | Some('F') => IssueSeverity::Error,
+                        Some('W') => IssueSeverity::Warning,
+                        Some('C') => IssueSeverity::Style,
+                        Some('R') => IssueSeverity::Info,
+                        _ => IssueSeverity::Warning,
+                    }
+                } else {
+                    IssueSeverity::Warning
+                };
+
+                // Create a PathBuf for the file
+                let file_path = PathBuf::from(file_str);
+
+                issues.push(LintIssue {
+                    severity,
+                    message: format!("{} ({})", message, error_type),
+                    file: Some(file_path),
+                    line: Some(line_num),
+                    column: Some(column),
+                    code,
+                    fix_available: false,
+                });
+            }
         }
 
         issues
     }
 
-    /// Run pylint on a file to check for issues
-    fn check_file(
+    /// Run pylint on multiple files to check for issues
+    fn check_files(
         &self,
-        file: &Path,
+        files: &[PathBuf],
         config: &ModelsToolConfig,
-    ) -> Result<Vec<LintIssue>, ToolError> {
+    ) -> Result<(Vec<LintIssue>, String, String), ToolError> {
+        // Skip if no files can be handled
+        let files_to_check: Vec<&Path> = files
+            .iter()
+            .filter(|file| self.can_handle(file))
+            .map(|file| file.as_path())
+            .collect();
+
+        if files_to_check.is_empty() {
+            return Ok((Vec::new(), String::new(), String::new()));
+        }
+
         let mut command = Command::new("pylint");
         command.arg("--output-format=text");
         command.arg("--score=n");
@@ -99,8 +125,10 @@ impl PyLint {
             command.arg(arg);
         }
 
-        // Add the file to check
-        command.arg(file);
+        // Add all the files to check
+        for file in files_to_check {
+            command.arg(file);
+        }
 
         // Run the command
         let output = command.output().map_err(|e| ToolError::ExecutionFailed {
@@ -110,9 +138,10 @@ impl PyLint {
 
         // Parse the output
         let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
         let issues = self.parse_output(&stdout);
 
-        Ok(issues)
+        Ok((issues, stdout, stderr))
     }
 }
 
@@ -135,24 +164,9 @@ impl LintTool for PyLint {
         config: &ModelsToolConfig,
     ) -> Result<LintResult, ToolError> {
         let start = Instant::now();
-        let mut issues = Vec::new();
 
-        // Process each file
-        for file in files {
-            if !self.can_handle(file) {
-                continue;
-            }
-
-            // Check the file
-            match self.check_file(file, config) {
-                Ok(file_issues) => {
-                    issues.extend(file_issues);
-                }
-                Err(e) => {
-                    return Err(e);
-                }
-            }
-        }
+        // Run pylint once for all files
+        let (issues, stdout, stderr) = self.check_files(files, config)?;
 
         let execution_time = start.elapsed();
 
@@ -166,11 +180,19 @@ impl LintTool for PyLint {
                 version: self.version(),
                 description: self.description().to_string(),
             }),
-            success: issues.is_empty(),
+            success: true, // Tool executed successfully even if issues were found
             issues,
             execution_time,
-            stdout: None,
-            stderr: None,
+            stdout: if stdout.is_empty() {
+                None
+            } else {
+                Some(stdout)
+            },
+            stderr: if stderr.is_empty() {
+                None
+            } else {
+                Some(stderr)
+            },
         })
     }
 

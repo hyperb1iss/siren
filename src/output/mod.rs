@@ -1,7 +1,8 @@
 //! Output formatting for Siren
 
 use crate::config::OutputConfig;
-use crate::models::{LintResult, ProjectInfo};
+use crate::models::{IssueSeverity, Language, LintResult, ProjectInfo, ToolType};
+use colored::Colorize;
 
 /// Trait for formatting output
 pub trait OutputFormatter {
@@ -129,214 +130,140 @@ impl OutputFormatter for PrettyFormatter {
         output
     }
 
-    fn format_results(&self, results: &[LintResult], config: &OutputConfig) -> String {
+    fn format_results(&self, results: &[LintResult], _config: &OutputConfig) -> String {
         let mut output = String::new();
 
-        // Group results by file path
-        let mut by_file: std::collections::HashMap<
-            String,
-            Vec<(&LintResult, &crate::models::LintIssue)>,
-        > = std::collections::HashMap::new();
-
-        // First, see if we have any clippy or clippy-fix results with stdout/stderr
-        // that we want to show directly for better formatting and context
-        let clippy_results: Vec<_> = results
-            .iter()
-            .filter(|r| r.tool_name == "clippy" || r.tool_name == "clippy-fix")
-            .collect();
-
-        if !clippy_results.is_empty() && config.show_code_snippets {
-            // Show original clippy output for better context, when available
-            for result in clippy_results {
-                // First check if we have any issues to show
-                if result.issues.is_empty() {
-                    continue;
-                }
-
-                // Add separator for this tool's output
-                output.push_str(&format!("\n🦀 {} results:\n", result.tool_name));
-
-                if let Some(stderr) = &result.stderr {
-                    if !stderr.trim().is_empty() {
-                        // For clippy, the important info is in stderr
-                        // Add some formatting to make it easier to read
-                        let formatted_stderr = stderr
-                            .lines()
-                            .map(|line| {
-                                // Add colors to error/warning lines
-                                if line.trim().starts_with("error") {
-                                    format!("  🔴 {}", line)
-                                } else if line.trim().starts_with("warning") {
-                                    format!("  🟠 {}", line)
-                                } else if line.contains("-->") {
-                                    format!("  📄 {}", line)
-                                } else if line.contains("|")
-                                    && line.trim().starts_with(char::is_numeric)
-                                {
-                                    format!("     {}", line)
-                                } else if line.trim().starts_with("=")
-                                    || line.trim().starts_with("help")
-                                {
-                                    format!("  💡 {}", line)
-                                } else {
-                                    format!("     {}", line)
-                                }
-                            })
-                            .collect::<Vec<_>>()
-                            .join("\n");
-
-                        output.push_str(&formatted_stderr);
-                        output.push('\n');
-                    }
-                }
-
-                if let Some(stdout) = &result.stdout {
-                    if !stdout.trim().is_empty() {
-                        // Sometimes important info can be in stdout
-                        output.push_str(stdout);
-                        output.push('\n');
-                    }
-                }
-
-                // Also show fixed count for clippy-fix
-                if result.tool_name == "clippy-fix" {
-                    let fixed_issues: Vec<_> = result
-                        .issues
-                        .iter()
-                        .filter(|i| {
-                            i.severity == crate::models::IssueSeverity::Info
-                                && i.message.contains("Fixed")
-                        })
-                        .collect();
-
-                    if !fixed_issues.is_empty() {
-                        for issue in fixed_issues {
-                            output.push_str(&format!(
-                                "\n  {} {}\n",
-                                if self.use_emoji { "✨" } else { "" },
-                                issue.message
-                            ));
-                        }
-                    }
-                }
-            }
-
-            // If we've added clippy output, add a separator
-            if !output.is_empty() {
-                output.push_str("\n──────────────────────────────────────────\n");
-            }
-        }
-
-        // Collect issues for non-clippy tools or if we want our regular format
+        // Display results for each tool
         for result in results {
-            for issue in &result.issues {
-                // Skip info messages about fixed issues (they're handled above)
-                if result.tool_name == "clippy-fix"
-                    && issue.severity == crate::models::IssueSeverity::Info
-                    && issue.message.contains("Fixed")
-                {
-                    continue;
-                }
+            // Determine the tool emoji based on language and tool type
+            let tool_symbol = match (
+                result.tool.as_ref().map(|t| t.language),
+                result.tool.as_ref().map(|t| t.tool_type),
+            ) {
+                (Some(Language::Rust), Some(ToolType::Linter)) => "🦀🔍",
+                (Some(Language::Rust), Some(ToolType::Formatter)) => "🦀🎨",
+                (Some(Language::Rust), Some(ToolType::TypeChecker)) => "🦀🔎",
+                (Some(Language::Rust), Some(ToolType::Fixer)) => "🦀🔧",
+                (Some(Language::Python), Some(ToolType::Linter)) => "🐍🔍",
+                (Some(Language::Python), Some(ToolType::Formatter)) => "🐍🎨",
+                (Some(Language::Python), Some(ToolType::TypeChecker)) => "🐍🔎",
+                (Some(Language::Python), Some(ToolType::Fixer)) => "🐍🔧",
+                (Some(Language::JavaScript), _) => "🌐",
+                (Some(Language::TypeScript), _) => "📘",
+                _ => "🔮",
+            };
 
-                if let Some(file) = &issue.file {
-                    // Get filename for grouping
-                    let file_key = if config.show_file_paths {
-                        file.display().to_string()
-                    } else {
-                        file.file_name()
-                            .map(|f| f.to_string_lossy().to_string())
-                            .unwrap_or_else(|| "unknown".to_string())
-                    };
+            // Get version info if available
+            let version_info = result
+                .tool
+                .as_ref()
+                .and_then(|t| t.version.as_ref())
+                .map_or("".to_string(), |v| format!(" ({})", v));
 
-                    // Add to file group
-                    by_file.entry(file_key).or_default().push((result, issue));
-                } else {
-                    // For issues without files, group under tool name
-                    by_file
-                        .entry(format!("[{}]", result.tool_name))
-                        .or_default()
-                        .push((result, issue));
-                }
-            }
-        }
+            // Create a header with tool name, status, and version
+            let status_icon = if result.success {
+                "✓".green()
+            } else {
+                "✗".red()
+            };
 
-        // If there are no issues, just return the output so far
-        if by_file.is_empty() {
-            return output;
-        }
+            // Add separator before each tool
+            output.push_str("\n");
 
-        // Sort files for consistent output
-        let mut file_keys: Vec<_> = by_file.keys().collect();
-        file_keys.sort();
+            // Add a nice separator
+            let separator = "━".repeat(60).dimmed();
+            output.push_str(&format!("{}\n\n", separator));
 
-        for file_key in file_keys {
-            let issues = &by_file[file_key];
+            // Tool header with icon, name and version
+            let header = format!(
+                "{} {} {}{}\n",
+                tool_symbol,
+                result.tool_name.bold(),
+                status_icon,
+                version_info
+            );
 
-            // Skip empty issue lists
-            if issues.is_empty() {
-                continue;
-            }
+            output.push_str(&header);
 
-            // File header
-            output.push_str(&format!("\n📄 {}:\n", file_key));
+            // Add a nice separator
+            output.push_str(&format!("{}\n\n", separator));
 
-            // Sort issues by line number
-            let mut sorted_issues = issues.clone();
-            sorted_issues.sort_by_key(|(_, issue)| issue.line.unwrap_or(0));
+            // Display issues summary if we have issues
+            if !result.issues.is_empty() {
+                // Count issues by severity
+                let mut error_count = 0;
+                let mut warning_count = 0;
+                let mut style_count = 0;
+                let mut info_count = 0;
 
-            // Track previous line to avoid duplicates
-            let mut prev_line: Option<usize> = None;
-
-            for (result, issue) in sorted_issues {
-                // Format issue line
-                let line_info = if let Some(line) = issue.line {
-                    // If we're showing the same line again, use a different prefix
-                    if prev_line == Some(line) {
-                        "      ".to_string()
-                    } else {
-                        prev_line = Some(line);
-                        format!("L{:<4}", line)
-                    }
-                } else {
-                    "     ".to_string()
-                };
-
-                let severity_icon = if self.use_emoji {
+                for issue in &result.issues {
                     match issue.severity {
-                        crate::models::IssueSeverity::Error => "🔴 ",
-                        crate::models::IssueSeverity::Warning => "🟠 ",
-                        crate::models::IssueSeverity::Info => "🔵 ",
-                        crate::models::IssueSeverity::Style => "💜 ",
+                        IssueSeverity::Error => error_count += 1,
+                        IssueSeverity::Warning => warning_count += 1,
+                        IssueSeverity::Style => style_count += 1,
+                        IssueSeverity::Info => info_count += 1,
                     }
-                } else {
-                    ""
-                };
-
-                // Tool name for reference
-                let tool_name = result.tool_name.as_str();
-
-                output.push_str(&format!(
-                    "  {} {} [{}]: {}\n",
-                    line_info, severity_icon, tool_name, issue.message
-                ));
-
-                // Show code snippet if available and enabled
-                if config.show_code_snippets && issue.code.is_some() {
-                    // Use simple indentation
-                    let formatted_code = issue
-                        .code
-                        .as_ref()
-                        .unwrap()
-                        .lines()
-                        .map(|line| format!("       │ {}", line))
-                        .collect::<Vec<_>>()
-                        .join("\n");
-
-                    output.push_str(&format!(
-                        "       ┌───────────────────\n{}\n       └───────────────────\n",
-                        formatted_code
-                    ));
                 }
+
+                // Create a summary line with colored counts
+                let mut summary_parts = Vec::new();
+
+                if error_count > 0 {
+                    summary_parts.push(format!("{} {}", error_count, "errors".red()));
+                }
+
+                if warning_count > 0 {
+                    summary_parts.push(format!("{} {}", warning_count, "warnings".yellow()));
+                }
+
+                if style_count > 0 {
+                    summary_parts.push(format!("{} {}", style_count, "style issues".magenta()));
+                }
+
+                if info_count > 0 {
+                    summary_parts.push(format!("{} {}", info_count, "info".blue()));
+                }
+
+                if !summary_parts.is_empty() {
+                    output.push_str(&format!("Issues found: {}\n\n", summary_parts.join(", ")));
+                }
+            }
+
+            // Show the tool's native output if available
+            let has_stdout = result.stdout.as_ref().map_or(false, |s| !s.is_empty());
+            let has_stderr = result.stderr.as_ref().map_or(false, |s| !s.is_empty());
+
+            if has_stdout || has_stderr {
+                if has_stdout {
+                    output.push_str(&format!("{}\n", result.stdout.as_ref().unwrap().trim()));
+                }
+
+                if has_stderr {
+                    // If we already displayed stdout, add some spacing
+                    if has_stdout {
+                        output.push_str("\n\n");
+                    }
+
+                    // If stderr contains an error message, format it nicely
+                    let stderr = result.stderr.as_ref().unwrap();
+                    if stderr.contains("error:") {
+                        output.push_str(&format!("  {}\n", stderr.trim().red()));
+                    } else {
+                        output.push_str(&format!("  {}\n", stderr.trim()));
+                    }
+                }
+
+                output.push_str("\n");
+            } else if result.issues.is_empty() {
+                // No output and no issues, show a success message
+                output.push_str(&format!("  {} No issues detected!\n\n", "✨".green()));
+            } else {
+                // Issues found but no output captured - this shouldn't happen now that we're fixing all tools
+                output.push_str(&format!(
+                    "  {} Found {} issues but output was not captured.\n\n",
+                    "⚠️".yellow(),
+                    result.issues.len()
+                ));
             }
         }
 
@@ -385,44 +312,100 @@ impl OutputFormatter for PrettyFormatter {
             }
         }
 
-        // Determine success icon
-        let status_icon = if self.use_emoji {
-            if error_count == 0 && warning_count == 0 {
-                "✨"
-            } else if error_count == 0 {
-                "⚠️"
-            } else {
-                "❌"
-            }
-        } else if error_count == 0 && warning_count == 0 {
-            "SUCCESS"
-        } else if error_count == 0 {
-            "WARNINGS"
-        } else {
-            "FAILED"
-        };
-
-        let mut output = format!(
-            "{} Summary: {} errors, {} warnings",
-            status_icon, error_count, warning_count
-        );
-
-        // Add style and info counts if present
-        if style_count > 0 || info_count > 0 {
-            output.push_str(&format!(
-                "\nTotal: {} issues found in {} files",
-                total_issues,
-                unique_files.len()
-            ));
-
-            // Add per-tool breakdown if we have multiple tools with issues
-            if tool_issues.len() > 1 {
-                output.push_str("\n\nBreakdown by tool:");
-                for (tool, count) in tool_issues.iter() {
-                    output.push_str(&format!("\n  {}: {} issues", tool, count));
+        // Determine overall status
+        let (status_icon, status_text) =
+            if error_count == 0 && warning_count == 0 && style_count == 0 {
+                if total_issues == 0 {
+                    ("✨", "Perfect! No issues found".green().bold())
+                } else {
+                    ("✨", "Success! Only informational notes".green().bold())
                 }
+            } else if error_count == 0 && warning_count == 0 {
+                ("🎨", "Good! Only style suggestions".blue().bold())
+            } else if error_count == 0 {
+                ("⚠️", "Warnings found".yellow().bold())
+            } else {
+                ("❌", "Errors found".red().bold())
+            };
+
+        // Create the summary header with a nice separator
+        let separator = "━".repeat(80).dimmed();
+        let mut output = format!("\n\n{}\n\n  {} {}\n\n", separator, status_icon, status_text);
+
+        // Create a detailed breakdown with pretty colors
+        let mut counts = Vec::new();
+
+        if error_count > 0 {
+            counts.push(format!("{} {}", error_count, "errors".red().bold()));
+        }
+
+        if warning_count > 0 {
+            counts.push(format!("{} {}", warning_count, "warnings".yellow().bold()));
+        }
+
+        if style_count > 0 {
+            counts.push(format!(
+                "{} {}",
+                style_count,
+                "style issues".magenta().bold()
+            ));
+        }
+
+        if info_count > 0 {
+            counts.push(format!("{} {}", info_count, "info notes".blue().bold()));
+        }
+
+        if !counts.is_empty() {
+            output.push_str(&format!("  📊 Found: {}\n", counts.join(", ")));
+            output.push_str(&format!("  📁 Affected: {} files\n", unique_files.len()));
+        }
+
+        // Add per-tool breakdown with nice icons and colors
+        if !tool_issues.is_empty() {
+            output.push_str("\n  🔍 Breakdown by tool:\n");
+
+            // Sort tools by number of issues (descending)
+            let mut tools: Vec<_> = tool_issues.iter().collect();
+            tools.sort_by(|a, b| b.1.cmp(a.1));
+
+            for (tool, count) in tools {
+                // Get percentage of total issues
+                let percentage = (*count as f64 / total_issues as f64 * 100.0).round() as usize;
+
+                // Determine icon based on tool name
+                let tool_icon = if tool.contains("ruff") {
+                    "🐍🔍"
+                } else if tool.contains("pylint") {
+                    "🐍📋"
+                } else if tool.contains("mypy") {
+                    "🐍🔎"
+                } else if tool.contains("clippy") {
+                    "🦀🔍"
+                } else if tool.contains("rustfmt") {
+                    "🦀🎨"
+                } else if tool.contains("black") {
+                    "🐍🎨"
+                } else if tool.contains("eslint") {
+                    "🌐🔍"
+                } else if tool.contains("prettier") {
+                    "🌐🎨"
+                } else {
+                    "🔧"
+                };
+
+                // Show tool name, issue count, and percentage
+                output.push_str(&format!(
+                    "    {} {} - {} issues ({}%)\n",
+                    tool_icon,
+                    tool.bold(),
+                    count,
+                    percentage
+                ));
             }
         }
+
+        // Add final separator with more space
+        output.push_str(&format!("\n{}\n", separator));
 
         output
     }

@@ -216,7 +216,10 @@ where
             // Process results
             for result in results {
                 match result {
-                    Ok(result) => all_results.push(result),
+                    Ok(result) => {
+                        // Just add the result to all_results for formatting through the formatter
+                        all_results.push(result);
+                    }
                     Err(err) => {
                         if self.verbosity >= Verbosity::Normal {
                             eprintln!("❌ Error running {}: {}", linter.name(), err);
@@ -422,6 +425,8 @@ where
                         "  ✅ {} completed with {} issues",
                         result.tool_name, issue_count
                     );
+
+                    // Just add the result to all_results for formatting
                     all_results.push(result);
                 }
                 Err(err) => {
@@ -635,6 +640,8 @@ where
                         "  ✅ {} completed with {} issues fixed",
                         result.tool_name, issue_count
                     );
+
+                    // Just add the result to all_results for formatting
                     all_results.push(result);
                 }
                 Err(err) => {
@@ -745,19 +752,21 @@ where
     ) -> Result<Vec<Arc<dyn LintTool>>, SirenError> {
         let mut selected_tools = Vec::new();
 
-        // Debug - Print all languages detected
-        eprintln!("DEBUG: Detected languages: {:?}", project_info.languages);
+        // Debug - Print all languages detected only in verbose mode
+        if self.verbosity >= Verbosity::Verbose {
+            eprintln!("Detected languages: {:?}", project_info.languages);
+        }
 
         // If specific tools are requested, use those
         if let Some(tool_names) = &args.tools {
-            eprintln!("DEBUG: Specific tools requested: {:?}", tool_names);
+            if self.verbosity >= Verbosity::Verbose {
+                eprintln!("Specific tools requested: {:?}", tool_names);
+            }
             for name in tool_names {
                 if let Some(tool) = self.tool_registry.get_tool_by_name(name) {
-                    eprintln!(
-                        "DEBUG: Found tool '{}', available: {}",
-                        name,
-                        tool.is_available()
-                    );
+                    if self.verbosity >= Verbosity::Verbose {
+                        eprintln!("Found tool '{}', available: {}", name, tool.is_available());
+                    }
                     selected_tools.push(tool);
                 } else if self.verbosity >= Verbosity::Normal {
                     eprintln!("⚠️ Tool '{}' not found", name);
@@ -789,15 +798,17 @@ where
         }
 
         // Otherwise, select tools based on detected languages
-        eprintln!("DEBUG: Selecting tools based on detected languages");
+        if self.verbosity >= Verbosity::Verbose {
+            eprintln!("Selecting tools based on detected languages");
+        }
         for language in &project_info.languages {
-            eprintln!("DEBUG: Getting tools for language: {:?}", language);
+            if self.verbosity >= Verbosity::Verbose {
+                eprintln!("Getting tools for language: {:?}", language);
+            }
             let language_tools = self.tool_registry.get_tools_for_language(*language);
-            eprintln!(
-                "DEBUG: Found {} tools for {:?}",
-                language_tools.len(),
-                language
-            );
+            if self.verbosity >= Verbosity::Verbose {
+                eprintln!("Found {} tools for {:?}", language_tools.len(), language);
+            }
 
             // For general check, prefer linters and type checkers
             let filtered_tools: Vec<_> = language_tools
@@ -805,21 +816,22 @@ where
                 .filter(|tool| {
                     let tool_type = tool.tool_type();
                     let available = tool.is_available();
-                    eprintln!(
-                        "DEBUG:   - Tool: {}, Type: {:?}, Available: {}",
-                        tool.name(),
-                        tool_type,
-                        available
-                    );
+                    if self.verbosity >= Verbosity::Verbose {
+                        eprintln!(
+                            "  - Tool: {}, Type: {:?}, Available: {}",
+                            tool.name(),
+                            tool_type,
+                            available
+                        );
+                    }
                     (tool_type == ToolType::Linter || tool_type == ToolType::TypeChecker)
                         && available
                 })
                 .collect();
 
-            eprintln!(
-                "DEBUG: Selected {} tools after filtering",
-                filtered_tools.len()
-            );
+            if self.verbosity >= Verbosity::Verbose {
+                eprintln!("Selected {} tools after filtering", filtered_tools.len());
+            }
             selected_tools.extend(filtered_tools);
         }
 
@@ -828,14 +840,12 @@ where
             // TODO: Add strictness logic here
         }
 
-        // Debug - Print selected tools
-        eprintln!("DEBUG: Final selected tools: {}", selected_tools.len());
-        for tool in &selected_tools {
-            eprintln!(
-                "DEBUG:   - {}, Available: {}",
-                tool.name(),
-                tool.is_available()
-            );
+        // Debug - Print selected tools only in verbose mode
+        if self.verbosity >= Verbosity::Verbose {
+            eprintln!("Final selected tools: {}", selected_tools.len());
+            for tool in &selected_tools {
+                eprintln!("  - {}, Available: {}", tool.name(), tool.is_available());
+            }
         }
 
         Ok(selected_tools)

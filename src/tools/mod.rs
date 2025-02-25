@@ -29,6 +29,14 @@ pub trait LintTool: Send + Sync {
     fn can_handle(&self, file_path: &Path) -> bool;
 
     /// Execute the tool on the given files
+    ///
+    /// Implementations MUST follow these guidelines:
+    /// 1. Always capture and include the tool's stdout and stderr in the LintResult
+    /// 2. Parsing issues into structured data is recommended but optional
+    /// 3. Return success=true if the tool executed without errors, even if issues were found
+    /// 4. Ensure both issues and raw output are available in the LintResult for better user experience
+    ///
+    /// See src/tools/python/pylint.rs or src/tools/rust/clippy.rs for reference implementations
     fn execute(&self, files: &[PathBuf], config: &ToolConfig) -> Result<LintResult, ToolError>;
 
     /// Get the tool type (formatter, linter, etc.)
@@ -133,6 +141,9 @@ macro_rules! define_tool_module {
 pub struct DefaultToolRegistry {
     /// Tools by name
     tools: HashMap<String, Arc<dyn LintTool>>,
+
+    /// Verbosity level for debug output
+    verbose: bool,
 }
 
 impl DefaultToolRegistry {
@@ -140,12 +151,12 @@ impl DefaultToolRegistry {
     pub fn new() -> Self {
         Self {
             tools: HashMap::new(),
+            verbose: false,
         }
     }
 
     /// Create a new DefaultToolRegistry with default tools
     pub fn with_default_tools() -> Self {
-        eprintln!("DEBUG: Creating tools registry in tools/mod.rs");
         let mut registry = Self::new();
 
         // Register default Rust tools
@@ -154,16 +165,10 @@ impl DefaultToolRegistry {
         registry.register_tool(Arc::new(rust::ClippyFixer::new()));
 
         // Register Python tools
-        eprintln!("DEBUG: Registering Python tools directly in tools/mod.rs");
         registry.register_tool(Arc::new(python::Ruff::new()));
         registry.register_tool(Arc::new(python::PyLint::new()));
         registry.register_tool(Arc::new(python::MyPy::new()));
         registry.register_tool(Arc::new(python::Black::new()));
-
-        eprintln!(
-            "DEBUG: Finished registering tools in tools/mod.rs - total tools: {}",
-            registry.tools.len()
-        );
 
         registry
     }
