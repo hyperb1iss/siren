@@ -1,8 +1,12 @@
 //! Output formatting for Siren
 
+pub mod terminal;
+
 use crate::config::OutputConfig;
 use crate::models::{IssueSeverity, Language, LintResult, ProjectInfo, ToolType};
 use colored::Colorize;
+use log::debug;
+use terminal::{divider, language_emoji, tool_emoji};
 
 /// Trait for formatting output
 pub trait OutputFormatter {
@@ -48,229 +52,195 @@ impl PrettyFormatter {
             _use_colors: use_colors,
         }
     }
+
+    // Helper to get language emoji with fallback for no-emoji mode
+    fn get_language_emoji(&self, language: &Language) -> &'static str {
+        if self.use_emoji {
+            language_emoji(language)
+        } else {
+            ""
+        }
+    }
+
+    // Helper to get tool emoji with fallback for no-emoji mode
+    fn get_tool_emoji(&self, tool_type: &ToolType) -> &'static str {
+        if self.use_emoji {
+            tool_emoji(tool_type)
+        } else {
+            ""
+        }
+    }
 }
 
 impl OutputFormatter for PrettyFormatter {
     fn format_detection(&self, project_info: &ProjectInfo) -> String {
         let mut output = String::new();
 
-        // Header
-        if self.use_emoji {
-            output.push_str("✨ Siren detected the following in your project:\n");
-        } else {
-            output.push_str("Siren detected the following in your project:\n");
+        // Add enchanted header
+        output.push_str("✨ Siren detected the following in your project:\n");
+
+        // Format language info
+        let mut language_info = Vec::new();
+        for language in &project_info.languages {
+            let emoji = self.get_language_emoji(language);
+            let name = format!("{:?}", language);
+            let files_count = format!(
+                "{} files",
+                project_info.file_counts.get(language).unwrap_or(&0)
+            );
+
+            language_info.push(format!("{} {:12} │ 📂 {:10}", emoji, name, files_count));
         }
 
-        // Languages - no box borders, more compact format
-        for lang in &project_info.languages {
-            let file_count = project_info.file_counts.get(lang).unwrap_or(&0);
-
-            // Get emoji for language
-            let lang_emoji = if self.use_emoji {
-                match lang {
-                    crate::models::Language::Rust => "🦀 ",
-                    crate::models::Language::Python => "🐍 ",
-                    crate::models::Language::JavaScript => "🌐 ",
-                    crate::models::Language::TypeScript => "📘 ",
-                    crate::models::Language::Html => "🌐 ",
-                    crate::models::Language::Css => "🎨 ",
-                    crate::models::Language::Go => "🐹 ",
-                    crate::models::Language::Ruby => "💎 ",
-                    crate::models::Language::Java => "☕ ",
-                    crate::models::Language::Php => "🐘 ",
-                    crate::models::Language::C => "🔍 ",
-                    crate::models::Language::Cpp => "🔧 ",
-                    crate::models::Language::CSharp => "🔷 ",
-                    crate::models::Language::Swift => "🔶 ",
-                    crate::models::Language::Markdown => "📝 ",
-                    crate::models::Language::Json => "📋 ",
-                    crate::models::Language::Yaml => "📄 ",
-                    crate::models::Language::Toml => "📁 ",
-                    _ => "📄 ",
-                }
-            } else {
-                ""
-            };
-
-            let file_emoji = if self.use_emoji { "📂 " } else { "" };
-
-            // Format line - without box borders
-            output.push_str(&format!(
-                "{}{:<10} │ {}{} files    ",
-                lang_emoji,
-                format!("{:?}", lang),
-                file_emoji,
-                file_count
-            ));
-
-            // Add detected tools for this language
-            let tools: Vec<_> = project_info
-                .detected_tools
-                .iter()
-                .filter(|t| t.language == *lang)
-                .collect();
-
-            if !tools.is_empty() {
-                let tool_emoji = if self.use_emoji { "🔧 " } else { "" };
-                let tool_names: Vec<_> = tools.iter().map(|t| t.name.as_str()).collect();
-                output.push_str(&format!("│ {}{}\n", tool_emoji, tool_names.join(", ")));
-            } else {
-                output.push('\n');
-            }
-        }
-
-        // Framework info
-        if !project_info.frameworks.is_empty() {
-            let framework_names: Vec<_> = project_info
-                .frameworks
-                .iter()
-                .map(|f| format!("{:?}", f))
-                .collect();
-
-            if self.use_emoji {
-                output.push_str(&format!("🧩 Frameworks: {}\n", framework_names.join(", ")));
-            } else {
-                output.push_str(&format!("Frameworks: {}\n", framework_names.join(", ")));
-            }
-        }
+        output.push_str(&language_info.join("\n"));
+        output.push('\n');
 
         output
     }
 
     fn format_results(&self, results: &[LintResult], _config: &OutputConfig) -> String {
+        debug!("Formatting {} lint results", results.len());
+
         let mut output = String::new();
 
-        // Display results for each tool
-        for result in results {
-            // Determine the tool emoji based on language and tool type
-            let tool_symbol = match (
-                result.tool.as_ref().map(|t| t.language),
-                result.tool.as_ref().map(|t| t.tool_type),
-            ) {
-                (Some(Language::Rust), Some(ToolType::Linter)) => "🦀🔍",
-                (Some(Language::Rust), Some(ToolType::Formatter)) => "🦀🎨",
-                (Some(Language::Rust), Some(ToolType::TypeChecker)) => "🦀🔎",
-                (Some(Language::Rust), Some(ToolType::Fixer)) => "🦀🔧",
-                (Some(Language::Python), Some(ToolType::Linter)) => "🐍🔍",
-                (Some(Language::Python), Some(ToolType::Formatter)) => "🐍🎨",
-                (Some(Language::Python), Some(ToolType::TypeChecker)) => "🐍🔎",
-                (Some(Language::Python), Some(ToolType::Fixer)) => "🐍🔧",
-                (Some(Language::JavaScript), _) => "🌐",
-                (Some(Language::TypeScript), _) => "📘",
-                _ => "🔮",
-            };
+        // Add total issues found
+        let total_issues: usize = results.iter().map(|r| r.issues.len()).sum();
 
-            // Get version info if available
-            let version_info = result
+        if !results.is_empty() {
+            output.push_str(&format!(
+                "\nFound {} issues across {} tools\n\n",
+                total_issues,
+                results.len()
+            ));
+            output.push_str(&divider());
+        }
+
+        // Group results by tool
+        for result in results {
+            // Get tool information
+            let language = result
+                .tool
+                .as_ref()
+                .map(|t| &t.language)
+                .unwrap_or(&Language::Unknown);
+            let tool_type = result
+                .tool
+                .as_ref()
+                .map(|t| &t.tool_type)
+                .unwrap_or(&ToolType::Linter);
+            let version = result
                 .tool
                 .as_ref()
                 .and_then(|t| t.version.as_ref())
-                .map_or("".to_string(), |v| format!(" ({})", v));
+                .map_or_else(|| "unknown version".to_string(), |v| v.clone());
 
-            // Create a header with tool name, status, and version
-            let status_icon = if result.success {
+            // Add tool header with emoji, name, and version
+            let language_emoji = self.get_language_emoji(language);
+            let tool_emoji = self.get_tool_emoji(tool_type);
+            let tool_status = if result.issues.is_empty() {
                 "✓".green()
             } else {
-                "✗".red()
+                "⚠️".yellow()
             };
 
-            // Add separator before each tool
-            output.push('\n');
-
-            // Add a nice separator
-            let separator = "━".repeat(60).dimmed();
-            output.push_str(&format!("{}\n\n", separator));
-
-            // Tool header with icon, name and version
-            let header = format!(
-                "{} {} {}{}\n",
-                tool_symbol,
+            // Format the header with tool info - simplified to avoid redundancy
+            output.push_str(&format!(
+                "\n\n{}{}{} {} ({})\n",
+                language_emoji,
+                tool_emoji,
                 result.tool_name.bold(),
-                status_icon,
-                version_info
-            );
+                tool_status,
+                version.dimmed(),
+            ));
 
-            output.push_str(&header);
+            output.push_str(&divider());
+            output.push_str("\n\n");
 
-            // Add a nice separator
-            output.push_str(&format!("{}\n\n", separator));
-
-            // Display issues summary if we have issues
-            if !result.issues.is_empty() {
-                // Count issues by severity
-                let mut error_count = 0;
-                let mut warning_count = 0;
-                let mut style_count = 0;
-                let mut info_count = 0;
-
-                for issue in &result.issues {
-                    match issue.severity {
-                        IssueSeverity::Error => error_count += 1,
-                        IssueSeverity::Warning => warning_count += 1,
-                        IssueSeverity::Style => style_count += 1,
-                        IssueSeverity::Info => info_count += 1,
-                    }
-                }
-
-                // Create a summary line with colored counts
-                let mut summary_parts = Vec::new();
-
-                if error_count > 0 {
-                    summary_parts.push(format!("{} {}", error_count, "errors".red()));
-                }
-
-                if warning_count > 0 {
-                    summary_parts.push(format!("{} {}", warning_count, "warnings".yellow()));
-                }
-
-                if style_count > 0 {
-                    summary_parts.push(format!("{} {}", style_count, "style issues".magenta()));
-                }
-
-                if info_count > 0 {
-                    summary_parts.push(format!("{} {}", info_count, "info".blue()));
-                }
-
-                if !summary_parts.is_empty() {
-                    output.push_str(&format!("Issues found: {}\n\n", summary_parts.join(", ")));
-                }
+            // If no issues, add a success message
+            if result.issues.is_empty() {
+                output.push_str(&format!("{}\n\n", "All checks passed!".green()));
+                continue;
             }
 
-            // Show the tool's native output if available
-            let has_stdout = result.stdout.as_ref().map_or(false, |s| !s.is_empty());
-            let has_stderr = result.stderr.as_ref().map_or(false, |s| !s.is_empty());
+            // Group issues by severity
+            let errors = result
+                .issues
+                .iter()
+                .filter(|i| i.severity == IssueSeverity::Error)
+                .collect::<Vec<_>>();
+            let warnings = result
+                .issues
+                .iter()
+                .filter(|i| {
+                    i.severity == IssueSeverity::Warning || i.severity == IssueSeverity::Style
+                })
+                .collect::<Vec<_>>();
+            let info = result
+                .issues
+                .iter()
+                .filter(|i| i.severity == IssueSeverity::Info)
+                .collect::<Vec<_>>();
 
-            if has_stdout || has_stderr {
-                if has_stdout {
-                    output.push_str(&format!("{}\n", result.stdout.as_ref().unwrap().trim()));
+            // Add issue count summary
+            if !errors.is_empty() || !warnings.is_empty() || !info.is_empty() {
+                let mut summary = Vec::new();
+                if !errors.is_empty() {
+                    summary.push(format!("{} errors", errors.len()));
+                }
+                if !warnings.is_empty() {
+                    summary.push(format!("{} style issues", warnings.len()));
+                }
+                if !info.is_empty() {
+                    summary.push(format!("{} info", info.len()));
                 }
 
-                if has_stderr {
-                    // If we already displayed stdout, add some spacing
-                    if has_stdout {
-                        output.push_str("\n\n");
-                    }
+                output.push_str(&format!("Issues found: {}\n\n", summary.join(", ")));
+            }
 
-                    // If stderr contains an error message, format it nicely
-                    let stderr = result.stderr.as_ref().unwrap();
-                    if stderr.contains("error:") {
-                        output.push_str(&format!("  {}\n", stderr.trim().red()));
+            // Add the actual issues
+            for issue in &result.issues {
+                // Format severity
+                let severity_str = match issue.severity {
+                    IssueSeverity::Error => "error".red(),
+                    IssueSeverity::Warning => "style".yellow(),
+                    IssueSeverity::Style => "style".magenta(),
+                    IssueSeverity::Info => "info".blue(),
+                };
+
+                // Format location
+                let location = if let Some(filepath) = &issue.file {
+                    if let Some(line) = issue.line {
+                        if let Some(column) = issue.column {
+                            format!("{}:{}:{}", filepath.display(), line, column)
+                        } else {
+                            format!("{}:{}", filepath.display(), line)
+                        }
                     } else {
-                        output.push_str(&format!("  {}\n", stderr.trim()));
+                        filepath.display().to_string()
                     }
-                }
+                } else {
+                    "".to_string()
+                };
 
-                output.push('\n');
-            } else if result.issues.is_empty() {
-                // No output and no issues, show a success message
-                output.push_str(&format!("  {} No issues detected!\n\n", "✨".green()));
-            } else {
-                // Issues found but no output captured - this shouldn't happen now that we're fixing all tools
-                output.push_str(&format!(
-                    "  {} Found {} issues but output was not captured.\n\n",
-                    "⚠️".yellow(),
-                    result.issues.len()
-                ));
+                // Format message
+                let message = &issue.message;
+
+                // Format rule if present (using code as rule_id)
+                let rule = if let Some(code) = &issue.code {
+                    format!(" [{}]", code.dimmed())
+                } else {
+                    "".to_string()
+                };
+
+                // Add to output
+                if !location.is_empty() {
+                    output.push_str(&format!(
+                        "{}: {}: {}{}\n",
+                        location, severity_str, message, rule
+                    ));
+                } else {
+                    output.push_str(&format!("{}: {}{}\n", severity_str, message, rule));
+                }
             }
         }
 
@@ -278,153 +248,129 @@ impl OutputFormatter for PrettyFormatter {
     }
 
     fn format_summary(&self, results: &[LintResult]) -> String {
-        // Count errors and warnings
+        // Create counters
         let mut error_count = 0;
         let mut warning_count = 0;
         let mut style_count = 0;
         let mut info_count = 0;
-        let mut total_issues = 0;
+        let mut files_affected = std::collections::HashSet::new();
+        let mut tool_counts = std::collections::HashMap::new();
 
-        // Count issues by tool
-        let mut tool_issues = std::collections::HashMap::new();
-
-        // Count files with issues
-        let mut unique_files = std::collections::HashSet::new();
-
+        // Count issues
         for result in results {
             for issue in &result.issues {
                 match issue.severity {
-                    crate::models::IssueSeverity::Error => error_count += 1,
-                    crate::models::IssueSeverity::Warning => warning_count += 1,
-                    crate::models::IssueSeverity::Style => style_count += 1,
-                    crate::models::IssueSeverity::Info => info_count += 1,
+                    IssueSeverity::Error => error_count += 1,
+                    IssueSeverity::Warning => warning_count += 1,
+                    IssueSeverity::Style => style_count += 1,
+                    IssueSeverity::Info => info_count += 1,
                 }
-                total_issues += 1;
 
-                // Track unique files with issues
-                if let Some(file) = &issue.file {
-                    unique_files.insert(file.clone());
+                // Count affected files
+                if let Some(filepath) = &issue.file {
+                    files_affected.insert(filepath.clone());
                 }
-            }
 
-            // Count issues by tool
-            let tool_name = &result.tool_name;
-            let issue_count = result.issues.len();
-
-            if issue_count > 0 {
-                tool_issues
-                    .entry(tool_name.clone())
-                    .and_modify(|count| *count += issue_count)
-                    .or_insert(issue_count);
+                // Count issues by tool
+                *tool_counts.entry(result.tool_name.clone()).or_insert(0) += 1;
             }
         }
 
-        // Determine overall status
-        let (status_icon, status_text) =
-            if error_count == 0 && warning_count == 0 && style_count == 0 {
-                if total_issues == 0 {
-                    ("✨", "Perfect! No issues found".green().bold())
-                } else {
-                    ("✨", "Success! Only informational notes".green().bold())
-                }
-            } else if error_count == 0 && warning_count == 0 {
-                ("🎨", "Good! Only style suggestions".blue().bold())
-            } else if error_count == 0 {
-                ("⚠️", "Warnings found".yellow().bold())
-            } else {
-                ("❌", "Errors found".red().bold())
-            };
+        // Create result string
+        let mut output = String::new();
 
-        // Create the summary header with a nice separator
-        let separator = "━".repeat(80).dimmed();
-        let mut output = format!("\n\n{}\n\n  {} {}\n\n", separator, status_icon, status_text);
+        // Add divider
+        output.push('\n');
+        output.push_str(&divider());
 
-        // Create a detailed breakdown with pretty colors
-        let mut counts = Vec::new();
-
+        // Add status header
         if error_count > 0 {
-            counts.push(format!("{} {}", error_count, "errors".red().bold()));
-        }
-
-        if warning_count > 0 {
-            counts.push(format!("{} {}", warning_count, "warnings".yellow().bold()));
-        }
-
-        if style_count > 0 {
-            counts.push(format!(
-                "{} {}",
-                style_count,
-                "style issues".magenta().bold()
+            output.push_str(&format!(
+                "\n\n  {} {}\n\n",
+                "❌".red(),
+                "Errors found".red().bold()
+            ));
+        } else if warning_count > 0 || style_count > 0 {
+            output.push_str(&format!(
+                "\n\n  {} {}\n\n",
+                "⚠️".yellow(),
+                "Warnings found".yellow().bold()
+            ));
+        } else {
+            output.push_str(&format!(
+                "\n\n  {} {}\n\n",
+                "✓".green(),
+                "All checks passed!".green().bold()
             ));
         }
 
-        if info_count > 0 {
-            counts.push(format!("{} {}", info_count, "info notes".blue().bold()));
-        }
+        // Add count summary
+        output.push_str(&format!(
+            "  📊 Found: {} errors, {} style issues, {} info notes\n",
+            error_count,
+            warning_count + style_count,
+            info_count
+        ));
 
-        if !counts.is_empty() {
-            output.push_str(&format!("  📊 Found: {}\n", counts.join(", ")));
-            output.push_str(&format!("  📁 Affected: {} files\n", unique_files.len()));
-        }
+        // Add files affected
+        output.push_str(&format!("  📁 Affected: {} files\n", files_affected.len()));
 
-        // Add per-tool breakdown with nice icons and colors
-        if !tool_issues.is_empty() {
+        // Add breakdown by tool if there are multiple tools
+        if tool_counts.len() > 1 {
             output.push_str("\n  🔍 Breakdown by tool:\n");
 
-            // Sort tools by number of issues (descending)
-            let mut tools: Vec<_> = tool_issues.iter().collect();
+            // Sort tools by issue count (descending)
+            let mut tools: Vec<_> = tool_counts.iter().collect();
             tools.sort_by(|a, b| b.1.cmp(a.1));
 
-            for (tool, count) in tools {
-                // Get percentage of total issues
-                let percentage = (*count as f64 / total_issues as f64 * 100.0).round() as usize;
-
-                // Determine icon based on tool name
-                let tool_icon = if tool.contains("ruff") {
-                    "🐍🔍"
-                } else if tool.contains("pylint") {
-                    "🐍📋"
-                } else if tool.contains("mypy") {
-                    "🐍🔎"
-                } else if tool.contains("clippy") {
-                    "🦀🔍"
-                } else if tool.contains("rustfmt") {
-                    "🦀🎨"
-                } else if tool.contains("black") {
-                    "🐍🎨"
-                } else if tool.contains("eslint") {
-                    "🌐🔍"
-                } else if tool.contains("prettier") {
-                    "🌐🎨"
+            // Calculate percentages
+            let total_issues = error_count + warning_count + style_count + info_count;
+            let percentage = |count: &i32| {
+                if total_issues > 0 {
+                    ((*count as f64 / total_issues as f64) * 100.0).round() as i32
                 } else {
-                    "🔧"
+                    0
+                }
+            };
+
+            // Format each tool's breakdown
+            for (tool_name, count) in tools {
+                let tool_emoji = match tool_name.as_str() {
+                    "pylint" => "🐍🔍",
+                    "mypy" => "🐍🔎",
+                    "ruff" => "🐍🔍",
+                    "eslint" => "🌐🔍",
+                    "clippy" => "🦀🔍",
+                    "rustfmt" => "🦀💅",
+                    _ => "🔧",
                 };
 
-                // Show tool name, issue count, and percentage
                 output.push_str(&format!(
                     "    {} {} - {} issues ({}%)\n",
-                    tool_icon,
-                    tool.bold(),
+                    tool_emoji,
+                    tool_name,
                     count,
-                    percentage
+                    percentage(count)
                 ));
             }
         }
 
-        // Add final separator with more space
-        output.push_str(&format!("\n{}\n", separator));
+        // Add divider at the end
+        output.push('\n');
+        output.push_str(&divider());
 
         output
     }
 }
 
-/// JSON formatter for machine-readable output
+/// JSON formatter
+#[derive(Clone)]
 pub struct JsonFormatter;
 
 impl JsonFormatter {
-    /// Create a new JsonFormatter (kept for future use)
+    /// Create a new JsonFormatter
     fn _new() -> Self {
-        Self
+        Self {}
     }
 }
 
@@ -438,25 +384,31 @@ impl OutputFormatter for JsonFormatter {
     }
 
     fn format_summary(&self, results: &[LintResult]) -> String {
-        // Count errors and warnings
+        // Count issues by severity
         let mut error_count = 0;
         let mut warning_count = 0;
+        let mut style_count = 0;
+        let mut info_count = 0;
 
         for result in results {
             for issue in &result.issues {
                 match issue.severity {
-                    crate::models::IssueSeverity::Error => error_count += 1,
-                    crate::models::IssueSeverity::Warning => warning_count += 1,
-                    _ => {}
+                    IssueSeverity::Error => error_count += 1,
+                    IssueSeverity::Warning => warning_count += 1,
+                    IssueSeverity::Style => style_count += 1,
+                    IssueSeverity::Info => info_count += 1,
                 }
             }
         }
 
+        // Create a simple summary object
         let summary = serde_json::json!({
-            "success": error_count == 0,
-            "error_count": error_count,
-            "warning_count": warning_count,
-            "issue_count": error_count + warning_count,
+            "total_issues": error_count + warning_count + style_count + info_count,
+            "errors": error_count,
+            "warnings": warning_count,
+            "style": style_count,
+            "info": info_count,
+            "tools_run": results.len(),
         });
 
         serde_json::to_string_pretty(&summary).unwrap_or_else(|_| "{}".to_string())

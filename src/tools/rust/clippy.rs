@@ -1,5 +1,6 @@
 //! Clippy linter for Rust
 
+use log::{debug, trace};
 use regex::Regex;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -183,15 +184,15 @@ impl Clippy {
                 .join(file_dir)
         };
 
-        println!("Starting directory search from: {}", file_dir.display());
+        debug!("Starting directory search from: {}", file_dir.display());
 
         let mut current_dir = Some(file_dir);
 
         while let Some(dir) = current_dir {
             let cargo_toml = dir.join("Cargo.toml");
-            println!("Checking for Cargo.toml at: {}", cargo_toml.display());
+            debug!("Checking for Cargo.toml at: {}", cargo_toml.display());
             if cargo_toml.exists() {
-                println!("Found Cargo.toml at: {}", dir.display());
+                debug!("Found Cargo.toml at: {}", dir.display());
                 return Ok(dir);
             }
 
@@ -201,7 +202,7 @@ impl Clippy {
 
         // If we can't find a Cargo.toml, use the current working directory
         let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-        println!(
+        debug!(
             "No Cargo.toml found, using current directory: {}",
             cwd.display()
         );
@@ -242,7 +243,7 @@ impl Clippy {
             "cargo clippy -- -W clippy::all in {}",
             project_dir.display()
         );
-        println!("Executing: {}", cmd_str);
+        debug!("Executing: {}", cmd_str);
 
         // Run the command
         let output = command.output().map_err(|e| ToolError::ExecutionFailed {
@@ -255,14 +256,14 @@ impl Clippy {
         let stderr = String::from_utf8_lossy(&output.stderr).to_string();
 
         // Always display output status
-        println!("Clippy completed with status: {}", output.status);
+        debug!("Clippy completed with status: {}", output.status);
 
-        // Display the output directly
+        // Log the output at trace level
         if !stdout.is_empty() {
-            println!("STDOUT:\n{}", stdout);
+            trace!("STDOUT:\n{}", stdout);
         }
         if !stderr.is_empty() {
-            println!("STDERR:\n{}", stderr);
+            trace!("STDERR:\n{}", stderr);
         }
 
         // Combine stdout and stderr for parsing

@@ -7,10 +7,13 @@ use crate::config::SirenConfig;
 use crate::detection::ProjectDetector;
 use crate::errors::SirenError;
 use crate::models::tools::ToolConfig;
-use crate::models::{Language, ProjectInfo, ToolType};
+use crate::models::{ProjectInfo, ToolType};
+use crate::output::terminal;
 use crate::output::OutputFormatter;
 use crate::runner::ToolRunner;
 use crate::tools::{LintTool, ToolRegistry};
+use colored::*;
+use log::{debug, warn};
 
 /// Command handler for the check (lint) command
 pub struct CheckCommand<D, R, O>
@@ -83,32 +86,18 @@ where
             self.detect_project(&all_paths)?
         };
 
-        // Always display detected project info
-        let info_output = self.output_formatter.format_detection(&project_info);
-        println!("{}", info_output);
+        // Display detected project info based on verbosity
+        if self.verbosity >= Verbosity::Normal {
+            let info_output = self.output_formatter.format_detection(&project_info);
+            println!("{}", info_output);
+        }
 
         // Select appropriate tools based on project_info and args
         let tools = self.select_tools_for_check(&project_info, &args, config)?;
 
-        // Always show tools being run
-        println!("🔮 Running checks with {} tools...", tools.len());
-
-        // List the tools being used (but only if there aren't too many)
-        if tools.len() <= 10 {
-            for tool in &tools {
-                println!(
-                    "   {} {} ({:?})",
-                    match tool.tool_type() {
-                        ToolType::Linter => "🔍",
-                        ToolType::TypeChecker => "🔎",
-                        ToolType::Formatter => "🎨",
-                        ToolType::Fixer => "🔧",
-                    },
-                    tool.name(),
-                    tool.language()
-                );
-            }
-        }
+        // Count files by language for information purposes
+        let _total_files: usize = project_info.file_counts.values().sum();
+        let _files_by_language = project_info.file_counts.clone();
 
         // Get files to check
         let files = if git_modified_only {
@@ -137,27 +126,6 @@ where
             all_files
         };
 
-        // Print information about files being checked - always show this information
-        println!("📂 Checking {} files...", files.len());
-
-        // Group files by language for better display
-        let files_by_language = self.group_files_by_language(&files);
-        for (language, lang_files) in &files_by_language {
-            println!(
-                "   {} {:?}: {} files",
-                match language {
-                    Language::Rust => "🦀",
-                    Language::Python => "🐍",
-                    Language::JavaScript => "🌐",
-                    Language::TypeScript => "📘",
-                    _ => "📄",
-                },
-                language,
-                lang_files.len()
-            );
-        }
-        println!();
-
         // Get default tool config
         let default_tool_config = config.tools.get("default").cloned().unwrap_or_default();
 
@@ -168,9 +136,19 @@ where
         // Create a tool runner
         let tool_runner = ToolRunner::new();
 
+        // Create our neon status display
+        let mut status_display = terminal::NeonDisplay::new();
+
+        // Store captured outputs for display at the end - only if in verbose mode
+        let mut captured_outputs = Vec::new();
+
         // Run each linter and collect results
         let mut all_results = Vec::new();
-        for linter in tools {
+        let mut tool_statuses = Vec::new();
+        let mut total_issues = 0;
+
+        // Process the scan and collect results
+        for linter in &tools {
             // Get tool-specific config or use default
             let mut config_tool_config = config
                 .tools
@@ -184,35 +162,104 @@ where
             // Convert to the correct ToolConfig type for the runner
             let config_for_runner = convert_tool_config(&config_tool_config);
 
-            // Execute the linter
-            println!("Running linter: {} on {} files", linter.name(), files.len());
+            // Create a status for this tool
+            let language = format!("{:?}", linter.language());
+            let tool_type = format!("{:?}", linter.tool_type());
+            let spinner_index =
+                status_display.add_tool_status(linter.name(), &language, &tool_type);
 
-            // Debug: print the first few file paths
-            if !files.is_empty() {
-                println!("First few files being checked:");
-                for (i, file) in files.iter().take(5).enumerate() {
-                    println!("  {}: {}", i + 1, file.display());
-                }
-                if files.len() > 5 {
-                    println!("  ... plus {} more files", files.len() - 5);
-                }
+            // Execute the tool - without logging the execution details unless in verbose mode
+            if self.verbosity >= Verbosity::Verbose {
+                debug!("Running linter: {} on {} files", linter.name(), files.len());
             }
 
-            let results = tool_runner
+            // Execute the tool and capture results
+            let tool_results = tool_runner
                 .run_tools(vec![linter.clone()], &files, &config_for_runner)
                 .await;
 
-            // Process results
-            for result in results {
+            // Process results and update the status
+            for result in tool_results {
                 match result {
                     Ok(result) => {
-                        // Just add the result to all_results for formatting through the formatter
+                        let issues_count = result.issues.len();
+                        total_issues += issues_count;
+
+                        // Only save stdout/stderr in verbose mode
+                        if self.verbosity >= Verbosity::Verbose
+                            && (result.stdout.is_some() || result.stderr.is_some())
+                        {
+                            captured_outputs.push((
+                                linter.name().to_string(),
+                                result.stdout.clone().unwrap_or_default(),
+                                result.stderr.clone().unwrap_or_default(),
+                            ));
+                        }
+
+                        if issues_count > 0 {
+                            status_display.finish_spinner(
+                                spinner_index,
+                                format!(
+                                    "{} 「{}」",
+                                    linter.name(),
+                                    format!("{} issues detected", issues_count).red()
+                                ),
+                            );
+                        } else {
+                            status_display.finish_spinner(
+                                spinner_index,
+                                format!("{} 「{}」", linter.name(), "system clean".green()),
+                            );
+                        }
+
                         all_results.push(result);
                     }
                     Err(err) => {
-                        if self.verbosity >= Verbosity::Normal {
-                            eprintln!("❌ Error running {}: {}", linter.name(), err);
+                        status_display.finish_spinner(
+                            spinner_index,
+                            format!("{} 「{}」", linter.name(), "execution failed".red()),
+                        );
+
+                        // Save error for later display only if verbose
+                        if self.verbosity >= Verbosity::Verbose {
+                            captured_outputs.push((
+                                linter.name().to_string(),
+                                String::new(),
+                                format!("ERROR: {}", err),
+                            ));
                         }
+
+                        if self.verbosity >= Verbosity::Normal {
+                            debug!("Error running {}: {}", linter.name(), err);
+                            tool_statuses.push(format!("❌ {} failed: {}", linter.name(), err));
+                        }
+                    }
+                }
+            }
+        }
+
+        // Finish the status display
+        status_display.finish(total_issues);
+
+        // A moment to appreciate the UI
+        std::thread::sleep(std::time::Duration::from_millis(300));
+
+        // Now display the captured outputs if in verbose mode
+        if self.verbosity >= Verbosity::Verbose && !captured_outputs.is_empty() {
+            println!("\nraw tool output:");
+
+            for (tool_name, stdout, stderr) in captured_outputs {
+                // Only show non-empty output
+                if !stdout.trim().is_empty() || !stderr.trim().is_empty() {
+                    println!("\n{}", tool_name.bright_magenta());
+                    println!("{}", "─".repeat(tool_name.len()).bright_blue());
+
+                    if !stdout.trim().is_empty() {
+                        println!("{}", stdout);
+                    }
+
+                    if !stderr.trim().is_empty() {
+                        println!("{}", stderr);
                     }
                 }
             }
@@ -220,14 +267,14 @@ where
 
         // Format and display results
         if !all_results.is_empty() {
-            // Print direct count of issues found for debugging
-            let total_issues: usize = all_results.iter().map(|r| r.issues.len()).sum();
-            println!(
-                "\nFound {} issues across {} tools",
-                total_issues,
-                all_results.len()
-            );
+            // Print any error messages we collected during tool execution
+            for status in tool_statuses {
+                eprintln!("{}", status);
+            }
 
+            println!("\ndetailed analysis:");
+
+            // Format and print the actual results
             let results_output = self
                 .output_formatter
                 .format_results(&all_results, &config.output);
@@ -235,9 +282,9 @@ where
 
             // Display summary
             let summary = self.output_formatter.format_summary(&all_results);
-            println!("\n{}", summary);
+            println!("{}", summary);
         } else if self.verbosity >= Verbosity::Normal {
-            println!("✨ No issues found!");
+            println!("\nall systems operational - no issues detected");
         }
 
         Ok(())
@@ -276,22 +323,22 @@ where
 
         // Debug - Print all languages detected only in verbose mode
         if self.verbosity >= Verbosity::Verbose {
-            eprintln!("Detected languages: {:?}", project_info.languages);
+            debug!("Detected languages: {:?}", project_info.languages);
         }
 
         // If specific tools are requested, use those
         if let Some(tool_names) = &args.tools {
             if self.verbosity >= Verbosity::Verbose {
-                eprintln!("Specific tools requested: {:?}", tool_names);
+                debug!("Specific tools requested: {:?}", tool_names);
             }
             for name in tool_names {
                 if let Some(tool) = self.tool_registry.get_tool_by_name(name) {
                     if self.verbosity >= Verbosity::Verbose {
-                        eprintln!("Found tool '{}', available: {}", name, tool.is_available());
+                        debug!("Found tool '{}', available: {}", name, tool.is_available());
                     }
                     selected_tools.push(tool);
                 } else if self.verbosity >= Verbosity::Normal {
-                    eprintln!("⚠️ Tool '{}' not found", name);
+                    warn!("⚠️ Tool '{}' not found", name);
                 }
             }
             return Ok(selected_tools);
@@ -325,11 +372,11 @@ where
         }
         for language in &project_info.languages {
             if self.verbosity >= Verbosity::Verbose {
-                eprintln!("Getting tools for language: {:?}", language);
+                debug!("Getting tools for language: {:?}", language);
             }
             let language_tools = self.tool_registry.get_tools_for_language(*language);
             if self.verbosity >= Verbosity::Verbose {
-                eprintln!("Found {} tools for {:?}", language_tools.len(), language);
+                debug!("Found {} tools for {:?}", language_tools.len(), language);
             }
 
             // For general check, prefer linters and type checkers
@@ -339,7 +386,7 @@ where
                     let tool_type = tool.tool_type();
                     let available = tool.is_available();
                     if self.verbosity >= Verbosity::Verbose {
-                        eprintln!(
+                        debug!(
                             "  - Tool: {}, Type: {:?}, Available: {}",
                             tool.name(),
                             tool_type,
@@ -352,7 +399,7 @@ where
                 .collect();
 
             if self.verbosity >= Verbosity::Verbose {
-                eprintln!("Selected {} tools after filtering", filtered_tools.len());
+                debug!("Selected {} tools after filtering", filtered_tools.len());
             }
             selected_tools.extend(filtered_tools);
         }
@@ -364,23 +411,13 @@ where
 
         // Debug - Print selected tools only in verbose mode
         if self.verbosity >= Verbosity::Verbose {
-            eprintln!("Final selected tools: {}", selected_tools.len());
+            debug!("Final selected tools: {}", selected_tools.len());
             for tool in &selected_tools {
-                eprintln!("  - {}, Available: {}", tool.name(), tool.is_available());
+                debug!("  - {}, Available: {}", tool.name(), tool.is_available());
             }
         }
 
         Ok(selected_tools)
-    }
-
-    /// Group files by language
-    fn group_files_by_language(&self, files: &[PathBuf]) -> HashMap<Language, Vec<PathBuf>> {
-        let mut groups: HashMap<Language, Vec<PathBuf>> = HashMap::new();
-        for file in files {
-            let language = crate::utils::detect_language(file);
-            groups.entry(language).or_default().push(file.clone());
-        }
-        groups
     }
 }
 

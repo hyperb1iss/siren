@@ -12,7 +12,9 @@ mod utils;
 
 use clap::Parser;
 use cli::{Cli, Commands, FixArgs, FormatArgs, Verbosity};
+use colored::Colorize;
 use errors::{DetectionError, SirenError, ToolError};
+use log::{debug, info, LevelFilter};
 use std::path::PathBuf;
 use tools::ToolRegistry;
 
@@ -21,9 +23,6 @@ async fn main() -> Result<(), SirenError> {
     // This variable should be flagged by clippy as unused
     #[allow(unused_variables)]
     let _unused_var = "This is unused";
-
-    // Initialize logger
-    env_logger::init();
 
     // Parse command line arguments
     let cli = Cli::parse();
@@ -35,9 +34,17 @@ async fn main() -> Result<(), SirenError> {
         Verbosity::from(cli.verbose)
     };
 
-    // Print a welcome message if not in quiet mode
-    if verbosity != Verbosity::Quiet {
-        println!("🧜‍♀️ Siren - Enchanting code quality with irresistible standards");
+    // Configure and initialize logger based on verbosity
+    if let Err(e) = setup_logger(verbosity) {
+        // If we can't set up logging, just print an error and continue
+        eprintln!("Failed to initialize logger: {}", e);
+    }
+
+    debug!("Logger initialized with verbosity: {:?}", verbosity);
+
+    // Print a welcome message only in normal verbosity mode
+    if verbosity == Verbosity::Normal {
+        print_stylish_welcome();
     }
 
     // Create the core components
@@ -47,9 +54,9 @@ async fn main() -> Result<(), SirenError> {
 
     // Debug print all tools to help diagnose issues
     if verbosity >= Verbosity::Verbose {
-        eprintln!("DEBUG: All tools registered in main.rs:");
+        debug!("All tools registered:");
         for tool in tool_registry.get_all_tools() {
-            eprintln!(
+            debug!(
                 "DEBUG:   - {} ({:?}) - Available: {}",
                 tool.name(),
                 tool.language(),
@@ -99,16 +106,7 @@ async fn main() -> Result<(), SirenError> {
 
             // Only print debug info if verbosity is high enough
             if verbosity >= Verbosity::Verbose {
-                // Print all tools to help diagnose issues
-                eprintln!("All tools registered:");
-                for tool in tool_registry.get_all_tools() {
-                    eprintln!(
-                        "  - {} ({:?}) - Available: {}",
-                        tool.name(),
-                        tool.language(),
-                        tool.is_available()
-                    );
-                }
+                // Tools already logged at debug level above, no need to duplicate here
             }
 
             if let Err(e) = app.check(args, expanded_paths, cli.git_modified).await {
@@ -434,37 +432,155 @@ async fn main() -> Result<(), SirenError> {
     Ok(())
 }
 
-/// Print a more user-friendly error message
-fn print_friendly_error(err: &SirenError, verbosity: Verbosity) {
-    match err {
-        SirenError::Detection(detection_err) => match detection_err {
-            DetectionError::InvalidDirectory(path) => {
-                eprintln!(
-                    "❌ Error: The path '{}' is not a valid directory",
-                    path.display()
-                );
-                eprintln!("   Please provide a valid directory path to scan for code");
-            }
-            DetectionError::DetectionFailed(msg) => {
-                eprintln!("❌ Error: Failed to detect project settings - {}", msg);
-            }
-            _ => eprintln!("❌ Error: {}", detection_err),
-        },
-        SirenError::Tool(tool_err) => match tool_err {
-            ToolError::NotFound(name) => {
-                eprintln!("❌ Error: Tool '{}' not found", name);
-                eprintln!("   Please make sure the tool is installed and available in your PATH");
-            }
-            _ => eprintln!("❌ Error: {}", tool_err),
-        },
-        _ => {
-            // For other errors, use the standard Display implementation
-            eprintln!("❌ Error: {}", err);
+/// Print a stylish welcome message
+fn print_stylish_welcome() {
+    use output::terminal::{divider, EnchantedColors};
 
-            // In verbose mode, print more details
-            if verbosity >= Verbosity::Verbose {
-                eprintln!("Error details: {:?}", err);
+    // Don't clear the screen
+
+    println!("{}", output::terminal::section_header("💫 Siren 💫"));
+    println!(
+        "{}",
+        EnchantedColors::highlight().apply_to("Ready to scan your code")
+    );
+    println!("{}", divider());
+}
+
+/// Configure the logger based on verbosity
+fn setup_logger(verbosity: Verbosity) -> Result<(), fern::InitError> {
+    // Determine the log level based on verbosity
+    let log_level = match verbosity {
+        Verbosity::Quiet => LevelFilter::Error,
+        Verbosity::Normal => LevelFilter::Info,
+        Verbosity::Verbose => LevelFilter::Debug,
+        Verbosity::Debug => LevelFilter::Trace,
+    };
+
+    // Only show debug messages from our crate unless in debug mode
+    let debug_mode = verbosity >= Verbosity::Verbose;
+
+    // Create a custom fern logger environment that restricts debug messages
+    // from external crates by default and properly filters by level
+    let mut logger = fern::Dispatch::new()
+        .format(move |out, message, record| {
+            // Skip debug messages entirely unless in verbose/debug mode
+            if (record.level() <= log::Level::Debug && !debug_mode) ||
+               // Filter out debug messages from external crates in verbose mode
+               (record.level() <= log::Level::Debug &&
+                !record.target().starts_with("siren") &&
+                debug_mode &&
+                record.level() != log::Level::Error)
+            {
+                return;
             }
+
+            out.finish(format_args!(
+                "{}{} {}",
+                chrono::Local::now().format("[%H:%M:%S]"),
+                match record.level() {
+                    log::Level::Error => "ERROR".bright_red(),
+                    log::Level::Warn => "WARN ".yellow(),
+                    log::Level::Info => "INFO ".bright_blue(),
+                    log::Level::Debug => "DEBUG".bright_cyan(),
+                    log::Level::Trace => "TRACE".magenta(),
+                },
+                message
+            ))
+        })
+        .level(LevelFilter::Warn) // Set a higher default threshold
+        .level_for("siren", log_level); // But allow our crate to use the requested level
+
+    // Only add terminal output if not quiet
+    if verbosity != Verbosity::Quiet {
+        logger = logger.chain(std::io::stdout());
+    }
+
+    logger.apply()?;
+
+    if debug_mode {
+        info!("Logger initialized with level: {:?}", log_level);
+    }
+
+    Ok(())
+}
+
+/// Print a user-friendly error message
+fn print_friendly_error(error: &SirenError, verbosity: Verbosity) {
+    match error {
+        SirenError::Detection(detection_err) => {
+            let title = "Detection Error";
+            let message = match detection_err {
+                DetectionError::InvalidDirectory(path) => format!(
+                    "The path '{}' is not a valid directory or file",
+                    path.display()
+                ),
+                DetectionError::DetectionFailed(msg) => format!("Detection failed: {}", msg),
+                DetectionError::Io(err) => format!("File system error: {}", err),
+            };
+
+            // Get detailed help message
+            let details = match detection_err {
+                DetectionError::InvalidDirectory(_) =>
+                    "Please provide a valid directory path, specific file, or a glob pattern (e.g., src/*.rs)",
+                _ => "",
+            };
+
+            let details_option = if !details.is_empty() {
+                Some(details)
+            } else {
+                None
+            };
+            output::terminal::error_panel(title, &message, details_option);
+        }
+        SirenError::Tool(tool_err) => {
+            let title = "Tool Error";
+            let message = match tool_err {
+                ToolError::NotFound(name) => format!("Tool '{}' not found", name),
+                ToolError::ExecutionFailed { name, message: _ } => {
+                    format!("Failed to execute tool '{}'", name)
+                }
+                ToolError::ToolFailed {
+                    name,
+                    code,
+                    message: _,
+                } => format!("Tool '{}' failed with exit code {}", name, code),
+                ToolError::Io(err) => format!("I/O error when running tool: {}", err),
+            };
+
+            // Determine what details to show
+            let details = if matches!(tool_err, ToolError::NotFound(_)) {
+                "Please make sure the tool is installed and available in your PATH"
+            } else if verbosity >= Verbosity::Verbose {
+                match tool_err {
+                    ToolError::ExecutionFailed { message, .. } => message,
+                    ToolError::ToolFailed { message, .. } => message,
+                    _ => "",
+                }
+            } else {
+                ""
+            };
+
+            let details_option = if !details.is_empty() {
+                Some(details)
+            } else {
+                None
+            };
+            output::terminal::error_panel(title, &message, details_option);
+        }
+        SirenError::Io(io_err) => {
+            let title = "I/O Error";
+            let message = format!("An input/output error occurred: {}", io_err);
+
+            // For I/O errors, we'll just show a simplified message
+            output::terminal::error_panel(title, &message, None);
+        }
+        SirenError::Config(config_err) => {
+            let title = "Configuration Error";
+            let message = config_err.to_string();
+
+            // For config errors, we don't have a good way to provide details
+            // that work well with lifetimes in this context
+            output::terminal::error_panel(title, &message, None);
         }
     }
 }

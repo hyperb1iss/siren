@@ -8,10 +8,10 @@ use std::process::Command;
 /// Check if a command exists in PATH
 pub fn command_exists<S: AsRef<OsStr>>(command: S) -> bool {
     let cmd = command.as_ref();
-    eprintln!("DEBUG: Checking if command exists: {:?}", cmd);
+    log::debug!("Checking if command exists: {:?}", cmd);
     let command_str = cmd.to_str().unwrap_or("[non-utf8]");
     let result = which::which(command_str).is_ok();
-    eprintln!("DEBUG: Command {:?} exists: {}", cmd, result);
+    log::debug!("Command {:?} exists: {}", cmd, result);
     result
 }
 
@@ -69,46 +69,6 @@ pub fn get_git_modified_files(dir: &Path) -> Result<Vec<PathBuf>, std::io::Error
         .collect();
 
     Ok(files)
-}
-
-/// Detect language from file extension
-pub fn detect_language(file_path: &Path) -> crate::models::Language {
-    use crate::models::Language;
-
-    if let Some(extension) = file_path.extension() {
-        let ext = extension.to_string_lossy().to_lowercase();
-        match ext.as_str() {
-            "rs" => Language::Rust,
-            "py" | "pyi" => Language::Python,
-            "js" | "jsx" | "mjs" => Language::JavaScript,
-            "ts" | "tsx" => Language::TypeScript,
-            "html" | "htm" => Language::Html,
-            "css" => Language::Css,
-            "go" => Language::Go,
-            "rb" => Language::Ruby,
-            "java" => Language::Java,
-            "php" => Language::Php,
-            "c" => Language::C,
-            "cpp" | "cc" | "cxx" | "h" | "hpp" => Language::Cpp,
-            "cs" => Language::CSharp,
-            "swift" => Language::Swift,
-            "md" | "markdown" => Language::Markdown,
-            "json" => Language::Json,
-            "yml" | "yaml" => Language::Yaml,
-            "toml" => Language::Toml,
-            _ => Language::Unknown,
-        }
-    } else {
-        // Handle special files without extensions
-        let filename = file_path
-            .file_name()
-            .map(|f| f.to_string_lossy().to_lowercase());
-        match filename.as_deref() {
-            Some("makefile") => Language::Makefile,
-            Some("dockerfile") => Language::Docker,
-            _ => Language::Unknown,
-        }
-    }
 }
 
 /// Expand glob patterns in the provided path strings

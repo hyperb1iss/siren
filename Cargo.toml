@@ -36,8 +36,10 @@ pathdiff = "0.2"  # For relative path calculations
 # Terminal UI and formatting
 colored = "3.0.0"
 console = "0.15"
-indicatif = "0.17" 
+indicatif = "0.17"
 dialoguer = "0.11"
+crossterm = "0.27"  # For terminal control and styling
+spinners = "4.1"    # For terminal spinners
 
 # Regular expressions
 regex = "1.10"
@@ -54,6 +56,10 @@ derive_more = { version = "2.0.1", features = ["full"] } # For derive macros
 strum = { version = "0.27.1", features = ["derive"] } # For enum utilities
 strum_macros = "0.27.1"
 enum-iterator = "2.0.0"  # For iterating over enum variants
+
+# New dependencies
+fern = "0.6"
+chrono = "0.4"
 
 [dev-dependencies]
 tempfile = "3.8"       # For temporary test directories

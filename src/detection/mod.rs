@@ -40,7 +40,7 @@ impl DefaultProjectDetector {
     }
 
     /// Detect language based on file extension
-    fn detect_language_from_extension(&self, ext: &str) -> Option<Language> {
+    pub fn detect_language_from_extension(&self, ext: &str) -> Option<Language> {
         match ext.to_lowercase().as_str() {
             "rs" => Some(Language::Rust),
             "py" => Some(Language::Python),
