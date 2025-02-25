@@ -174,7 +174,9 @@ impl OutputFormatter for PrettyFormatter {
                                     && line.trim().starts_with(char::is_numeric)
                                 {
                                     format!("     {}", line)
-                                } else if line.trim().starts_with("=") || line.trim().starts_with("help") {
+                                } else if line.trim().starts_with("=")
+                                    || line.trim().starts_with("help")
+                                {
                                     format!("  💡 {}", line)
                                 } else {
                                     format!("     {}", line)

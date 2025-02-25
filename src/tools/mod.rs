@@ -138,13 +138,13 @@ impl DefaultToolRegistry {
     /// Create a new DefaultToolRegistry with default tools
     pub fn with_default_tools() -> Self {
         let mut registry = Self::new();
-        
+
         // Register default Rust tools
         registry.register_tool(Arc::new(rust::Rustfmt::new()));
         registry.register_tool(Arc::new(rust::Clippy::new()));
         registry.register_tool(Arc::new(rust::ClippyFixer::new()));
-        
-        // We should also register Python and JS tools here, but for now we'll 
+
+        // We should also register Python and JS tools here, but for now we'll
         // just register Rust tools for simplicity
 
         registry

@@ -182,6 +182,12 @@ $ siren fix
 # Focus on a specific directory or file
 $ siren check src/components/
 
+# Use glob patterns to check specific files or directories
+$ siren check . "src/components/**/*.tsx" "lib/**/*.js"
+
+# Fix issues in specific parts of your codebase
+$ siren fix core/templates "**/*.html"
+
 # Target a specific language
 $ siren check --lang rust
 

@@ -175,11 +175,24 @@ impl Clippy {
             file_path
         };
 
-        let mut current_dir = Some(file_dir.to_path_buf());
+        // Convert to absolute path if it's not already
+        let file_dir = if file_dir.is_absolute() {
+            file_dir.to_path_buf()
+        } else {
+            std::env::current_dir()
+                .unwrap_or_else(|_| PathBuf::from("."))
+                .join(file_dir)
+        };
+
+        println!("Starting directory search from: {}", file_dir.display());
+
+        let mut current_dir = Some(file_dir);
 
         while let Some(dir) = current_dir {
             let cargo_toml = dir.join("Cargo.toml");
+            println!("Checking for Cargo.toml at: {}", cargo_toml.display());
             if cargo_toml.exists() {
+                println!("Found Cargo.toml at: {}", dir.display());
                 return Ok(dir);
             }
 
@@ -187,8 +200,13 @@ impl Clippy {
             current_dir = dir.parent().map(|p| p.to_path_buf());
         }
 
-        // If we can't find a Cargo.toml, use the current directory
-        Ok(PathBuf::from("."))
+        // If we can't find a Cargo.toml, use the current working directory
+        let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        println!(
+            "No Cargo.toml found, using current directory: {}",
+            cwd.display()
+        );
+        Ok(cwd)
     }
 
     /// Run clippy with the given arguments
@@ -196,59 +214,57 @@ impl Clippy {
         &self,
         rust_files: &[PathBuf],
         project_dir: &Path,
-        config: &ModelsToolConfig,
+        _config: &ModelsToolConfig,
         fix_mode: bool,
     ) -> Result<(LintResult, String, String), ToolError> {
         let start_time = Instant::now();
 
-        // Run clippy
+        // Build the clippy command with minimal arguments
         let mut command = Command::new("cargo");
         command.arg("clippy");
-        command.arg("--quiet"); // Suppress cargo output, only show clippy results
 
-        // If specific files are specified, add them to the command
-        // Clippy doesn't have a direct way to specify files, but we can at least
-        // print which files we're checking
-        if !rust_files.is_empty() {
-            // Log which files we're checking
-            println!(
-                "Running clippy on {} Rust files in {}",
-                rust_files.len(),
-                project_dir.display()
-            );
-        }
-
-        // Add extra arguments
-        for arg in &config.extra_args {
-            command.arg(arg);
-        }
-
-        // Add fix flag if in fix mode
+        // If fixing, add the fix flag
         if fix_mode {
             command.arg("--fix");
-
-            // If the config specifies auto_fix=false, then we should only check, not fix
-            if !config.auto_fix {
-                command.arg("--allow-dirty");
-                command.arg("--allow-staged");
-            }
         }
 
-        // Enable all clippy lints
-        command.args(["--", "-W", "clippy::all"]);
+        // Add -- separator for clippy-specific arguments
+        command.arg("--");
 
-        // Set current directory to project directory
+        // Add a basic warning level
+        command.arg("-W");
+        command.arg("clippy::all");
+
+        // Set current directory to project_dir
         command.current_dir(project_dir);
+
+        // Show the full command being executed
+        let cmd_str = format!(
+            "cargo clippy -- -W clippy::all in {}",
+            project_dir.display()
+        );
+        println!("Executing: {}", cmd_str);
 
         // Run the command
         let output = command.output().map_err(|e| ToolError::ExecutionFailed {
             name: self.name().to_string(),
-            message: format!("Failed to execute cargo clippy: {}", e),
+            message: format!("Failed to execute clippy: {}", e),
         })?;
 
         // Parse output
         let stdout = String::from_utf8_lossy(&output.stdout).to_string();
         let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+        // Always display output status
+        println!("Clippy completed with status: {}", output.status);
+
+        // Display the output directly
+        if !stdout.is_empty() {
+            println!("STDOUT:\n{}", stdout);
+        }
+        if !stderr.is_empty() {
+            println!("STDERR:\n{}", stderr);
+        }
 
         // Combine stdout and stderr for parsing
         let combined_output = format!("{}\n{}", stdout, stderr);
@@ -508,7 +524,8 @@ impl LintTool for ClippyFixer {
         let project_dir = clippy.find_cargo_toml_dir(rust_files.first().unwrap())?;
 
         // Run clippy in fix mode
-        let (mut result, _stdout, stderr) = clippy.run_clippy(&rust_files, &project_dir, config, true)?;
+        let (mut result, _stdout, stderr) =
+            clippy.run_clippy(&rust_files, &project_dir, config, true)?;
 
         // Update the tool name and type for our result
         result.tool_name = self.name().to_string();

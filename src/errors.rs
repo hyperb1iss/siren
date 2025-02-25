@@ -78,7 +78,7 @@ pub enum ToolError {
 #[derive(Debug, Error)]
 pub enum DetectionError {
     /// Invalid directory
-    #[error("Invalid directory: {0}")]
+    #[error("The path '{0}' is not a valid directory or file\nPlease provide a valid directory path, specific file, or a glob pattern (e.g., src/*.rs)")]
     InvalidDirectory(PathBuf),
 
     /// Detection failed

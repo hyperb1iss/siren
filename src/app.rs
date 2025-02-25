@@ -60,8 +60,39 @@ where
         // Load configuration
         let config = self.load_config(&paths)?;
 
-        // Detect project information
-        let project_info = self.detect_project(&paths)?;
+        // Clone paths from args to avoid ownership issues
+        let args_paths = args.paths.clone();
+
+        // Combine paths from the Cli struct and CheckArgs
+        let all_paths = if args_paths.is_empty() {
+            paths.clone()
+        } else {
+            args_paths
+        };
+
+        // Get project root directory
+        let dir = all_paths
+            .first()
+            .map(|p| p.as_path())
+            .unwrap_or_else(|| Path::new("."));
+
+        // Extract path patterns (anything after the first path)
+        let patterns: Vec<String> = if all_paths.len() > 1 {
+            all_paths
+                .iter()
+                .skip(1)
+                .map(|p| p.to_string_lossy().to_string())
+                .collect()
+        } else {
+            Vec::new()
+        };
+
+        // Detect project information with patterns if provided
+        let project_info = if !patterns.is_empty() {
+            self.detect_project_with_patterns(dir, &patterns)?
+        } else {
+            self.detect_project(&all_paths)?
+        };
 
         // Always display detected project info (removed verbosity check)
         let info_output = self.output_formatter.format_detection(&project_info);
@@ -92,12 +123,12 @@ where
 
         // Get files to check
         let files = if git_modified_only {
-            let dir = paths
+            let dir = all_paths
                 .first()
                 .map(|p| p.as_path())
                 .unwrap_or_else(|| Path::new("."));
             crate::utils::get_git_modified_files(dir)?
-        } else if paths.is_empty() {
+        } else if all_paths.is_empty() {
             // If no paths are specified, use the current directory
             let current_dir = Path::new(".");
             self.collect_files_with_gitignore(current_dir)?
@@ -105,7 +136,7 @@ where
             // Expand directories to files
             let mut all_files = Vec::new();
 
-            for path in &paths {
+            for path in &all_paths {
                 if path.is_dir() {
                     let dir_files = self.collect_files_with_gitignore(path)?;
                     all_files.extend(dir_files);
@@ -165,6 +196,19 @@ where
             let config_for_runner = convert_tool_config(&config_tool_config);
 
             // Execute the linter
+            println!("Running linter: {} on {} files", linter.name(), files.len());
+
+            // Debug: print the first few file paths
+            if !files.is_empty() {
+                println!("First few files being checked:");
+                for (i, file) in files.iter().take(5).enumerate() {
+                    println!("  {}: {}", i + 1, file.display());
+                }
+                if files.len() > 5 {
+                    println!("  ... plus {} more files", files.len() - 5);
+                }
+            }
+
             let results = tool_runner
                 .run_tools(vec![linter.clone()], &files, &config_for_runner)
                 .await;
@@ -184,6 +228,14 @@ where
 
         // Format and display results
         if !all_results.is_empty() {
+            // Print direct count of issues found for debugging
+            let total_issues: usize = all_results.iter().map(|r| r.issues.len()).sum();
+            println!(
+                "\nFound {} issues across {} tools",
+                total_issues,
+                all_results.len()
+            );
+
             let results_output = self
                 .output_formatter
                 .format_results(&all_results, &config.output);
@@ -209,8 +261,39 @@ where
         // Load configuration
         let config = self.load_config(&paths)?;
 
-        // Detect project information
-        let project_info = self.detect_project(&paths)?;
+        // Clone paths from args to avoid ownership issues
+        let args_paths = args.paths.clone();
+
+        // Combine paths from the Cli struct and FormatArgs
+        let all_paths = if args_paths.is_empty() {
+            paths.clone()
+        } else {
+            args_paths
+        };
+
+        // Get project root directory
+        let dir = all_paths
+            .first()
+            .map(|p| p.as_path())
+            .unwrap_or_else(|| Path::new("."));
+
+        // Extract path patterns (anything after the first path)
+        let patterns: Vec<String> = if all_paths.len() > 1 {
+            all_paths
+                .iter()
+                .skip(1)
+                .map(|p| p.to_string_lossy().to_string())
+                .collect()
+        } else {
+            Vec::new()
+        };
+
+        // Detect project information with patterns if provided
+        let project_info = if !patterns.is_empty() {
+            self.detect_project_with_patterns(dir, &patterns)?
+        } else {
+            self.detect_project(&all_paths)?
+        };
 
         // Always display detected project info
         let info_output = self.output_formatter.format_detection(&project_info);
@@ -238,7 +321,11 @@ where
                     formatter.name(),
                     formatter.is_available()
                 );
-                formatters.push(formatter);
+                if formatter.is_available() {
+                    formatters.push(formatter);
+                } else {
+                    println!("⚠️ Skipping unavailable formatter: {}", formatter.name());
+                }
             }
         }
 
@@ -264,12 +351,12 @@ where
 
         // Get files to format
         let files = if git_modified_only {
-            let dir = paths
+            let dir = all_paths
                 .first()
                 .map(|p| p.as_path())
                 .unwrap_or_else(|| Path::new("."));
             crate::utils::get_git_modified_files(dir)?
-        } else if paths.is_empty() {
+        } else if all_paths.is_empty() {
             // If no paths are specified, use the current directory
             let current_dir = Path::new(".");
             self.collect_files_with_gitignore(current_dir)?
@@ -277,7 +364,7 @@ where
             // Expand directories to files
             let mut all_files = Vec::new();
 
-            for path in &paths {
+            for path in &all_paths {
                 if path.is_dir() {
                     let dir_files = self.collect_files_with_gitignore(path)?;
                     all_files.extend(dir_files);
@@ -302,41 +389,43 @@ where
         // Default tool config
         let default_tool_config = ConfigToolConfig::default();
 
-        // Format files with each formatter
+        // Create a tool runner
+        let tool_runner = ToolRunner::new(self.tool_registry.clone());
+
+        // Prepare all available formatters
+        let available_formatters: Vec<_> = formatters
+            .into_iter()
+            .filter(|f| f.is_available())
+            .collect();
+
+        if available_formatters.is_empty() {
+            println!("⚠️ No available formatters found for the detected languages.");
+            return Ok(());
+        }
+
+        // Setup default tool configuration
+        let mut default_config = convert_tool_config(&default_tool_config);
+        default_config.check = args.check;
+
+        println!("🔨 Running {} formatters...", available_formatters.len());
+        let results = tool_runner
+            .run_tools(available_formatters, &files, &default_config)
+            .await;
+
+        // Process results
         let mut all_results = Vec::new();
-        for formatter in formatters {
-            // Skip tools that aren't available
-            if !formatter.is_available() {
-                println!("⚠️ Skipping unavailable formatter: {}", formatter.name());
-                continue;
-            }
-
-            // Get tool-specific config or use default
-            let mut config_tool_config = config
-                .tools
-                .get(formatter.name())
-                .cloned()
-                .unwrap_or_else(|| default_tool_config.clone());
-
-            // Set check mode from command-line arguments
-            config_tool_config.check = Some(args.check);
-
-            let tool_config = convert_tool_config(&config_tool_config);
-
-            // Execute the formatter
-            println!("🔨 Running formatter: {}", formatter.name());
-            match formatter.execute(&files, &tool_config) {
+        for result in results {
+            match result {
                 Ok(result) => {
                     let issue_count = result.issues.len();
-                    all_results.push(result);
                     println!(
                         "  ✅ {} completed with {} issues",
-                        formatter.name(),
-                        issue_count
+                        result.tool_name, issue_count
                     );
+                    all_results.push(result);
                 }
                 Err(err) => {
-                    println!("  ❌ Error running {}: {}", formatter.name(), err);
+                    println!("  ❌ Error running formatter: {}", err);
                 }
             }
         }
@@ -376,6 +465,7 @@ where
             let format_args = FormatArgs {
                 check: false,
                 tools: args.tools.clone(),
+                paths: args.paths.clone(),
             };
 
             // Run the format command
@@ -386,8 +476,39 @@ where
         // Load configuration
         let config = self.load_config(&paths)?;
 
-        // Detect project information
-        let project_info = self.detect_project(&paths)?;
+        // Clone paths from args to avoid ownership issues
+        let args_paths = args.paths.clone();
+
+        // Combine paths from the Cli struct and FixArgs
+        let all_paths = if args_paths.is_empty() {
+            paths.clone()
+        } else {
+            args_paths
+        };
+
+        // Get project root directory
+        let dir = all_paths
+            .first()
+            .map(|p| p.as_path())
+            .unwrap_or_else(|| Path::new("."));
+
+        // Extract path patterns (anything after the first path)
+        let patterns: Vec<String> = if all_paths.len() > 1 {
+            all_paths
+                .iter()
+                .skip(1)
+                .map(|p| p.to_string_lossy().to_string())
+                .collect()
+        } else {
+            Vec::new()
+        };
+
+        // Detect project information with patterns if provided
+        let project_info = if !patterns.is_empty() {
+            self.detect_project_with_patterns(dir, &patterns)?
+        } else {
+            self.detect_project(&all_paths)?
+        };
 
         // Always display detected project info if we didn't run format first
         if !args.format {
@@ -446,12 +567,12 @@ where
 
         // Get files to fix
         let files = if git_modified_only {
-            let dir = paths
+            let dir = all_paths
                 .first()
                 .map(|p| p.as_path())
                 .unwrap_or_else(|| Path::new("."));
             crate::utils::get_git_modified_files(dir)?
-        } else if paths.is_empty() {
+        } else if all_paths.is_empty() {
             // If no paths are specified, use the current directory
             let current_dir = Path::new(".");
             self.collect_files_with_gitignore(current_dir)?
@@ -459,7 +580,7 @@ where
             // Expand directories to files
             let mut all_files = Vec::new();
 
-            for path in &paths {
+            for path in &all_paths {
                 if path.is_dir() {
                     let dir_files = self.collect_files_with_gitignore(path)?;
                     all_files.extend(dir_files);
@@ -484,37 +605,40 @@ where
         // Get default tool config
         let default_tool_config = config.tools.get("default").cloned().unwrap_or_default();
 
-        // Execute fixers and collect results
+        // Create a tool runner
+        let tool_runner = ToolRunner::new(self.tool_registry.clone());
+
+        // Prepare all available fixers
+        let available_fixers: Vec<_> = fixers.into_iter().filter(|f| f.is_available()).collect();
+
+        if available_fixers.is_empty() {
+            println!("⚠️ No available fixers found for the detected languages.");
+            return Ok(());
+        }
+
+        // Setup default tool configuration
+        let mut default_config = convert_tool_config(&default_tool_config);
+        default_config.auto_fix = true; // Ensure auto_fix is enabled for fixers
+
+        println!("🔧 Running {} fixers...", available_fixers.len());
+        let results = tool_runner
+            .run_tools(available_fixers, &files, &default_config)
+            .await;
+
+        // Process results
         let mut all_results = Vec::new();
-        for fixer in fixers {
-            // Skip tools that aren't available
-            if !fixer.is_available() {
-                println!("⚠️ Skipping unavailable fixer: {}", fixer.name());
-                continue;
-            }
-
-            // Get tool-specific config or use default
-            let config_tool_config = config
-                .tools
-                .get(fixer.name())
-                .cloned()
-                .unwrap_or_else(|| default_tool_config.clone());
-            let tool_config = convert_tool_config(&config_tool_config);
-
-            // Execute the fixer
-            println!("🔧 Running fixer: {}", fixer.name());
-            match fixer.execute(&files, &tool_config) {
+        for result in results {
+            match result {
                 Ok(result) => {
                     let issue_count = result.issues.len();
-                    all_results.push(result);
                     println!(
                         "  ✅ {} completed with {} issues fixed",
-                        fixer.name(),
-                        issue_count
+                        result.tool_name, issue_count
                     );
+                    all_results.push(result);
                 }
                 Err(err) => {
-                    println!("  ❌ Error running {}: {}", fixer.name(), err);
+                    println!("  ❌ Error running fixer: {}", err);
                 }
             }
         }
@@ -537,84 +661,44 @@ where
     }
 
     /// Run the detect command
-    pub fn detect(&self, _args: DetectArgs, paths: Vec<PathBuf>) -> Result<(), SirenError> {
-        // Detect project information
-        let project_info = self.detect_project(&paths)?;
+    pub fn detect(&self, args: DetectArgs, paths: Vec<PathBuf>) -> Result<(), SirenError> {
+        // Clone paths from args to avoid ownership issues
+        let args_paths = args.paths.clone();
 
-        // Format and display the detection results
-        let output = self.output_formatter.format_detection(&project_info);
-        println!("{}", output);
+        // Combine paths from the Cli struct and DetectArgs
+        let all_paths = if args_paths.is_empty() {
+            paths.clone()
+        } else {
+            args_paths
+        };
 
-        // Show available tools
-        if self.verbosity >= Verbosity::Verbose {
-            println!("\n🧰 Available tools:");
+        // Get project root directory
+        let dir = all_paths
+            .first()
+            .map(|p| p.as_path())
+            .unwrap_or_else(|| Path::new("."));
 
-            for language in &project_info.languages {
-                let tools = self.tool_registry.get_tools_for_language(*language);
-                if !tools.is_empty() {
-                    println!("\n{:?}:", language);
+        // Extract path patterns (anything after the first path)
+        let patterns: Vec<String> = if all_paths.len() > 1 {
+            all_paths
+                .iter()
+                .skip(1)
+                .map(|p| p.to_string_lossy().to_string())
+                .collect()
+        } else {
+            Vec::new()
+        };
 
-                    // Group tools by type
-                    let mut formatters = Vec::new();
-                    let mut linters = Vec::new();
-                    let mut type_checkers = Vec::new();
-                    let mut fixers = Vec::new();
+        // Detect project information with patterns if provided
+        let project_info = if !patterns.is_empty() {
+            self.detect_project_with_patterns(dir, &patterns)?
+        } else {
+            self.detect_project(&all_paths)?
+        };
 
-                    for tool in tools {
-                        match tool.tool_type() {
-                            ToolType::Formatter => formatters.push(tool),
-                            ToolType::Linter => linters.push(tool),
-                            ToolType::TypeChecker => type_checkers.push(tool),
-                            ToolType::Fixer => fixers.push(tool),
-                        }
-                    }
-
-                    if !formatters.is_empty() {
-                        println!(
-                            "  Formatters: {}",
-                            formatters
-                                .iter()
-                                .map(|t| t.name())
-                                .collect::<Vec<_>>()
-                                .join(", ")
-                        );
-                    }
-
-                    if !linters.is_empty() {
-                        println!(
-                            "  Linters: {}",
-                            linters
-                                .iter()
-                                .map(|t| t.name())
-                                .collect::<Vec<_>>()
-                                .join(", ")
-                        );
-                    }
-
-                    if !type_checkers.is_empty() {
-                        println!(
-                            "  Type Checkers: {}",
-                            type_checkers
-                                .iter()
-                                .map(|t| t.name())
-                                .collect::<Vec<_>>()
-                                .join(", ")
-                        );
-                    }
-
-                    if !fixers.is_empty() {
-                        println!(
-                            "  Fixers: {}",
-                            fixers
-                                .iter()
-                                .map(|t| t.name())
-                                .collect::<Vec<_>>()
-                                .join(", ")
-                        );
-                    }
-                }
-            }
-        }
+        // Display detected project info
+        let info_output = self.output_formatter.format_detection(&project_info);
+        println!("{}", info_output);
 
         Ok(())
     }
@@ -641,6 +725,15 @@ where
             .unwrap_or_else(|| Path::new("."));
 
         self.detector.detect(dir)
+    }
+
+    /// Detect project information with specific path patterns
+    fn detect_project_with_patterns(
+        &self,
+        dir: &Path,
+        patterns: &[String],
+    ) -> Result<ProjectInfo, SirenError> {
+        self.detector.detect_with_patterns(dir, patterns)
     }
 
     /// Select appropriate tools for checking based on project info and arguments

@@ -1,27 +1,145 @@
 use crate::models::{DetectedTool, Language, ToolType};
+use globset::{Glob, GlobSet, GlobSetBuilder};
 use log::debug;
-use std::path::Path;
+use std::collections::HashSet;
+use std::path::{Path, PathBuf};
 
 /// Detect tool configurations in a project directory
 pub fn detect_tools(dir: &Path) -> Vec<DetectedTool> {
+    detect_tools_in_paths(dir, &[])
+}
+
+/// Detect tool configurations in specific paths with glob pattern support
+///
+/// # Arguments
+///
+/// * `project_root` - The root directory of the project
+/// * `patterns` - Glob patterns to include (e.g., "core/templates/**/*.html")
+///
+/// If patterns is empty, all files/directories under project_root will be checked.
+/// Patterns are relative to the project_root.
+pub fn detect_tools_in_paths(project_root: &Path, patterns: &[String]) -> Vec<DetectedTool> {
     let mut tools = Vec::new();
 
-    // Check for Rust tools
-    detect_rust_tools(dir, &mut tools);
+    // If no patterns provided, just check the project root
+    if patterns.is_empty() {
+        // Check for Rust tools
+        detect_rust_tools(project_root, &mut tools);
 
-    // Check for Python tools
-    detect_python_tools(dir, &mut tools);
+        // Check for Python tools
+        detect_python_tools(project_root, &mut tools);
 
-    // Check for JavaScript/TypeScript tools
-    detect_js_tools(dir, &mut tools);
+        // Check for JavaScript/TypeScript tools
+        detect_js_tools(project_root, &mut tools);
 
-    // Check for CSS tools
-    detect_css_tools(dir, &mut tools);
+        // Check for CSS tools
+        detect_css_tools(project_root, &mut tools);
 
-    // Check for HTML tools
-    detect_html_tools(dir, &mut tools);
+        // Check for HTML tools
+        detect_html_tools(project_root, &mut tools);
 
-    tools
+        return tools;
+    }
+
+    // Create a globset from the provided patterns
+    let mut builder = GlobSetBuilder::new();
+    for pattern in patterns {
+        match Glob::new(pattern) {
+            Ok(glob) => {
+                builder.add(glob);
+            }
+            Err(err) => {
+                debug!("Invalid glob pattern '{}': {}", pattern, err);
+            }
+        }
+    }
+
+    let globset = match builder.build() {
+        Ok(gs) => gs,
+        Err(err) => {
+            debug!("Failed to build globset: {}", err);
+            return tools;
+        }
+    };
+
+    // Collect paths that match the patterns
+    let matching_paths = collect_matching_paths(project_root, &globset);
+
+    // Group matching paths by directory to avoid redundant checks
+    let directories: HashSet<PathBuf> = matching_paths
+        .iter()
+        .filter_map(|path| {
+            if path.is_dir() {
+                Some(path.clone())
+            } else {
+                path.parent().map(|p| p.to_path_buf())
+            }
+        })
+        .collect();
+
+    // Check for tools in each matching directory
+    for dir in directories {
+        // Check for Rust tools
+        detect_rust_tools(&dir, &mut tools);
+
+        // Check for Python tools
+        detect_python_tools(&dir, &mut tools);
+
+        // Check for JavaScript/TypeScript tools
+        detect_js_tools(&dir, &mut tools);
+
+        // Check for CSS tools
+        detect_css_tools(&dir, &mut tools);
+
+        // Check for HTML tools
+        detect_html_tools(&dir, &mut tools);
+    }
+
+    // Deduplicate tools (we might have found the same tool config multiple times)
+    deduplicate_tools(tools)
+}
+
+/// Collect paths that match the given glob patterns
+fn collect_matching_paths(root: &Path, globset: &GlobSet) -> Vec<PathBuf> {
+    let mut result = Vec::new();
+    let walker = walkdir::WalkDir::new(root)
+        .follow_links(false)
+        .into_iter()
+        .filter_map(Result::ok);
+
+    for entry in walker {
+        // Get the path relative to the root
+        if let Some(relative_path) = pathdiff::diff_paths(entry.path(), root) {
+            // Convert to string for matching
+            if let Some(path_str) = relative_path.to_str() {
+                // Check if path matches any of the glob patterns
+                if globset.is_match(path_str) {
+                    result.push(entry.path().to_path_buf());
+                }
+            }
+        }
+    }
+
+    result
+}
+
+/// Deduplicate tools by name and config_path
+fn deduplicate_tools(tools: Vec<DetectedTool>) -> Vec<DetectedTool> {
+    let mut unique_tools = Vec::new();
+    let mut seen = HashSet::new();
+
+    for tool in tools {
+        let key = (
+            tool.name.clone(),
+            tool.config_path.to_string_lossy().to_string(),
+        );
+        if !seen.contains(&key) {
+            seen.insert(key);
+            unique_tools.push(tool);
+        }
+    }
+
+    unique_tools
 }
 
 /// Detect Rust linting/formatting tools

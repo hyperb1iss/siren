@@ -213,8 +213,9 @@ fn file_exists_recursive(dir: &Path, filename: &str, max_depth: usize) -> bool {
 
     for entry in dir_entries.flatten() {
         let path = entry.path();
-        if (path.is_file() && path.file_name().and_then(|f| f.to_str()) == Some(filename)) ||
-           (path.is_dir() && file_exists_recursive(&path, filename, max_depth - 1)) {
+        if (path.is_file() && path.file_name().and_then(|f| f.to_str()) == Some(filename))
+            || (path.is_dir() && file_exists_recursive(&path, filename, max_depth - 1))
+        {
             return true;
         }
     }

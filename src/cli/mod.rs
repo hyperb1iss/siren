@@ -149,6 +149,10 @@ pub struct CheckArgs {
     /// Automatically fix issues when possible
     #[arg(short, long)]
     pub auto_fix: bool,
+
+    /// Files or directories to check
+    #[arg(name = "PATH")]
+    pub paths: Vec<PathBuf>,
 }
 
 /// Arguments for the format command
@@ -161,6 +165,10 @@ pub struct FormatArgs {
     /// Only format specific tools
     #[arg(long)]
     pub tools: Option<Vec<String>>,
+
+    /// Files or directories to format
+    #[arg(name = "PATH")]
+    pub paths: Vec<PathBuf>,
 }
 
 /// Arguments for the fix command
@@ -177,6 +185,10 @@ pub struct FixArgs {
     /// Run format before fixing
     #[arg(long, default_value = "true")]
     pub format: bool,
+
+    /// Files or directories to fix
+    #[arg(name = "PATH")]
+    pub paths: Vec<PathBuf>,
 }
 
 /// Arguments for the detect command
@@ -189,6 +201,10 @@ pub struct DetectArgs {
     /// Output format
     #[arg(long, default_value = "pretty")]
     pub format: String,
+
+    /// Files or directories to detect tools in
+    #[arg(name = "PATH")]
+    pub paths: Vec<PathBuf>,
 }
 
 /// Arguments for the init command
@@ -257,4 +273,8 @@ pub struct FormatAndFixArgs {
     /// Check mode for format - don't write files, just check if they need formatting
     #[arg(short = 'c', long)]
     pub check_format: bool,
+
+    /// Files or directories to format and fix
+    #[arg(name = "PATH")]
+    pub paths: Vec<PathBuf>,
 }

@@ -1,5 +1,6 @@
 //! Utility functions for Siren
 
+use globset::{Glob, GlobSetBuilder};
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -150,4 +151,101 @@ pub fn detect_language(file_path: &Path) -> crate::models::Language {
             _ => Language::Unknown,
         }
     }
+}
+
+/// Expand glob patterns in the provided path strings
+///
+/// Takes strings like "src/*.rs" and expands them into actual file paths.
+/// If the path doesn't contain glob patterns or doesn't match any files,
+/// it will be returned as-is.
+///
+/// # Arguments
+///
+/// * `base_dir` - The base directory for relative patterns
+/// * `patterns` - List of path patterns that may contain globs
+///
+/// # Returns
+///
+/// A vector of resolved path buffers
+pub fn expand_glob_patterns(base_dir: &Path, patterns: &[PathBuf]) -> Vec<PathBuf> {
+    if patterns.is_empty() {
+        return vec![base_dir.to_path_buf()];
+    }
+
+    let mut result = Vec::new();
+    let mut has_expanded = false;
+
+    for pattern in patterns {
+        let pattern_str = pattern.to_string_lossy();
+
+        // Check if the pattern contains wildcard characters
+        if pattern_str.contains('*') || pattern_str.contains('?') || pattern_str.contains('[') {
+            // Create a glob pattern
+            let glob_pattern = if pattern.is_absolute() {
+                pattern_str.to_string()
+            } else {
+                // Make the pattern relative to base_dir
+                let base = base_dir.to_string_lossy();
+                if base.ends_with('/') || base.ends_with('\\') {
+                    format!("{}{}", base, pattern_str)
+                } else {
+                    format!("{}/{}", base, pattern_str)
+                }
+            };
+
+            // Build a globset from this pattern
+            match Glob::new(&glob_pattern) {
+                Ok(glob) => {
+                    let mut builder = GlobSetBuilder::new();
+                    builder.add(glob);
+
+                    if let Ok(globset) = builder.build() {
+                        // Collect all matching files
+                        let walker = walkdir::WalkDir::new(base_dir)
+                            .follow_links(false)
+                            .into_iter()
+                            .filter_map(Result::ok);
+
+                        let mut found_matches = false;
+
+                        for entry in walker {
+                            let path = entry.path();
+                            let relative_path = pathdiff::diff_paths(path, base_dir)
+                                .unwrap_or_else(|| path.to_path_buf());
+
+                            if let Some(path_str) = relative_path.to_str() {
+                                if globset.is_match(path_str) {
+                                    result.push(path.to_path_buf());
+                                    found_matches = true;
+                                    has_expanded = true;
+                                }
+                            }
+                        }
+
+                        // If no matches were found, keep the original pattern
+                        if !found_matches {
+                            result.push(pattern.clone());
+                        }
+                    } else {
+                        // If we couldn't build the globset, keep the original pattern
+                        result.push(pattern.clone());
+                    }
+                }
+                Err(_) => {
+                    // If we couldn't parse the glob, keep the original pattern
+                    result.push(pattern.clone());
+                }
+            }
+        } else {
+            // Not a glob pattern, add as-is
+            result.push(pattern.clone());
+        }
+    }
+
+    // If no globs were expanded, return the original patterns
+    if !has_expanded && !patterns.is_empty() {
+        return patterns.to_vec();
+    }
+
+    result
 }
