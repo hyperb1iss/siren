@@ -21,6 +21,9 @@ pub use python::*;
 // Re-export Rust tools
 pub use rust::*;
 
+// Re-export executor for public use
+pub use executor::*;
+
 /// Trait for lint/format tools
 pub trait LintTool: Send + Sync {
     /// Get the tool name
