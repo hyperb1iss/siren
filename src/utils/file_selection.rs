@@ -63,18 +63,3 @@ pub fn collect_files_to_process(
         Ok(all_files)
     }
 }
-
-/// Filter files to only include those that can be handled by the specified tool
-pub fn filter_files_for_tool<T>(
-    files: &[PathBuf],
-    tool: &T,
-) -> Vec<PathBuf>
-where
-    T: crate::tools::LintTool,
-{
-    files
-        .iter()
-        .filter(|file| tool.can_handle(file))
-        .cloned()
-        .collect()
-} 

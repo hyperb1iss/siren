@@ -7,7 +7,6 @@ use std::process::Command;
 
 // Export file selection utilities
 pub mod file_selection;
-pub use file_selection::*;
 
 /// Check if a command exists in PATH
 pub fn command_exists<S: AsRef<OsStr>>(command: S) -> bool {

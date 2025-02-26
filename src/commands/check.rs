@@ -69,7 +69,7 @@ where
         };
 
         // Get project root directory
-        let dir = all_paths
+        let _dir = all_paths
             .first()
             .map(|p| p.as_path())
             .unwrap_or_else(|| Path::new("."));
@@ -99,7 +99,7 @@ where
             for file in &files_to_check {
                 println!("  - {}", file.display());
             }
-            println!("");
+            println!();
         }
 
         // Get default tool config
@@ -118,8 +118,11 @@ where
         // Store captured outputs for display at the end - only if in verbose mode
         let mut captured_outputs = Vec::new();
 
+        // Define a type for tool groups to simplify the complex type
+        type ToolGroup = Vec<(Arc<dyn LintTool>, usize)>;
+        
         // Group tools by their config hash to run tools with the same config together
-        let mut tool_groups: HashMap<String, Vec<(Arc<dyn LintTool>, usize)>> = HashMap::new();
+        let mut tool_groups: HashMap<String, ToolGroup> = HashMap::new();
 
         // Set up all tools first and group them by config
         for linter in &tools {
@@ -301,22 +304,9 @@ where
         Ok(())
     }
 
-    // Helper methods moved from app.rs
-
     /// Detect project information from the provided paths
     fn detect_project(&self, paths: &[PathBuf]) -> Result<ProjectInfo, SirenError> {
         self.detector.detect(paths)
-    }
-
-    /// Detect project information with specific path patterns
-    fn detect_project_with_patterns(
-        &self,
-        dir: &Path,
-        patterns: &[String],
-    ) -> Result<ProjectInfo, SirenError> {
-        // This method is kept for backward compatibility but is no longer used
-        // in the execute method. We now handle paths directly in the detect method.
-        self.detector.detect_with_patterns(dir, patterns)
     }
 
     /// Select appropriate tools for checking based on project info and arguments
