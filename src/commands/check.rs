@@ -91,7 +91,8 @@ where
         let _files_by_language = project_info.file_counts.clone();
 
         // Collect files to check using our shared utility
-        let files_to_check = file_selection::collect_files_to_process(&all_paths, git_modified_only)?;
+        let files_to_check =
+            file_selection::collect_files_to_process(&all_paths, git_modified_only)?;
 
         // Debug output for files to check
         if self.verbosity >= Verbosity::Verbose {
@@ -120,7 +121,7 @@ where
 
         // Define a type for tool groups to simplify the complex type
         type ToolGroup = Vec<(Arc<dyn LintTool>, usize)>;
-        
+
         // Group tools by their config hash to run tools with the same config together
         let mut tool_groups: HashMap<String, ToolGroup> = HashMap::new();
 

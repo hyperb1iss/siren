@@ -472,8 +472,11 @@ async fn test_python_file_path_handling() {
     // Create two test fixtures with different issues
     let (_temp_dir1, file_path1) = create_test_fixture(Language::Python, "unused_import");
     let (_temp_dir2, file_path2) = create_test_fixture(Language::Python, "formatting");
-    
-    println!("Created test fixtures at: {:?} and {:?}", file_path1, file_path2);
+
+    println!(
+        "Created test fixtures at: {:?} and {:?}",
+        file_path1, file_path2
+    );
 
     // Initialize registry with tools
     let registry = DefaultToolRegistry::with_default_tools();
@@ -496,7 +499,7 @@ async fn test_python_file_path_handling() {
         .into_iter()
         .filter(|tool| tool.tool_type() == ToolType::Linter)
         .collect();
-    
+
     if python_linters.is_empty() {
         println!("No Python linters available, skipping test");
         return;
@@ -517,7 +520,11 @@ async fn test_python_file_path_handling() {
     // Finally, run linters on both files
     println!("Running linters on both files");
     let results_both = runner
-        .run_tools(python_linters.clone(), &[file_path1.clone(), file_path2.clone()], &config)
+        .run_tools(
+            python_linters.clone(),
+            &[file_path1.clone(), file_path2.clone()],
+            &config,
+        )
         .await;
 
     // Verify that issues from file1 only appear when file1 is included
@@ -591,8 +598,11 @@ async fn test_python_file_path_handling() {
             }
 
             // Verify we have issues from both files
-            println!("  File1 issues: {}, File2 issues: {}", file1_issues, file2_issues);
-            
+            println!(
+                "  File1 issues: {}, File2 issues: {}",
+                file1_issues, file2_issues
+            );
+
             // Only assert if the tool found any issues at all
             if !lint_result.issues.is_empty() {
                 assert!(

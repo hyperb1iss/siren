@@ -21,7 +21,7 @@ pub fn collect_files_to_process(
     if git_modified_only {
         // Get files modified in git
         let git_files = crate::utils::get_git_modified_files(dir)?;
-        
+
         // Filter git files to only include those that match our paths
         if paths.len() == 1 && paths[0] == PathBuf::from(".") {
             // If only the current directory is specified, use all git files

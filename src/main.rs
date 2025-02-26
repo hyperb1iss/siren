@@ -321,8 +321,19 @@ async fn main() -> Result<(), SirenError> {
             // Handle different output formats
             match args.format.as_str() {
                 "json" => {
+                    // Sort tools by language and then by name for consistent output
+                    let mut sorted_tools = filtered_tools;
+                    sorted_tools.sort_by(|a, b| {
+                        // First sort by language
+                        let a_lang = format!("{:?}", a.language);
+                        let b_lang = format!("{:?}", b.language);
+
+                        // Then by name - use Ord implementation directly to avoid reference issues
+                        a_lang.cmp(&b_lang).then_with(|| Ord::cmp(&a.name, &b.name))
+                    });
+
                     // Create a serializable representation
-                    let json_tools: Vec<serde_json::Value> = filtered_tools
+                    let json_tools: Vec<serde_json::Value> = sorted_tools
                         .iter()
                         .map(|tool| {
                             serde_json::json!({
@@ -365,7 +376,7 @@ async fn main() -> Result<(), SirenError> {
                             .push(tool);
                     }
 
-                    // Sort languages for consistent output
+                    // Sort languages alphabetically for consistent output
                     let mut languages: Vec<_> = by_language.keys().collect();
                     languages.sort_by_key(|l| format!("{:?}", l));
 
@@ -375,42 +386,51 @@ async fn main() -> Result<(), SirenError> {
 
                         println!("\n📦 {:?}:", language);
 
-                        // Sort tools by type then name for consistent output
+                        // Sort tools by name for consistent output (alphabetically)
                         let mut sorted_tools = tools.clone();
-                        sorted_tools.sort_by(|a, b| {
-                            // Convert tool types to strings for comparison
-                            let a_type = format!("{:?}", a.tool_type);
-                            let b_type = format!("{:?}", b.tool_type);
-
-                            // Compare by type and then by name
-                            a_type.cmp(&b_type).then_with(|| a.name.cmp(&b.name))
-                        });
+                        sorted_tools.sort_by(|a, b| a.name.cmp(&b.name));
 
                         // Group by tool type
-                        let mut current_type = None;
+                        let mut tool_types = std::collections::HashMap::new();
 
+                        // Group tools by their type
                         for tool in sorted_tools {
-                            // Print tool type header if it changed
-                            if current_type != Some(tool.tool_type) {
-                                current_type = Some(tool.tool_type);
-                                println!("  🔧 {:?}s:", tool.tool_type);
+                            tool_types
+                                .entry(tool.tool_type)
+                                .or_insert_with(Vec::new)
+                                .push(tool);
+                        }
+
+                        // Sort tool types alphabetically
+                        let mut types: Vec<_> = tool_types.keys().collect();
+                        types.sort_by_key(|t| format!("{:?}", t));
+
+                        // Display tools by type
+                        for &tool_type in &types {
+                            println!("  🔧 {:?}s:", tool_type);
+
+                            // Get tools for this type (already sorted by name)
+                            let type_tools = &tool_types[tool_type];
+
+                            for tool in type_tools {
+                                // Format availability and version information
+                                let available = if tool.available {
+                                    "✓".to_string()
+                                } else {
+                                    "✗".to_string()
+                                };
+
+                                let version = tool
+                                    .version
+                                    .clone()
+                                    .map_or("".to_string(), |v| format!(" ({})", v));
+
+                                // Print tool information
+                                println!(
+                                    "    • {} [{}{}] - {}",
+                                    tool.name, available, version, tool.description
+                                );
                             }
-
-                            // Format availability and version information
-                            let available = if tool.available {
-                                "✓".to_string()
-                            } else {
-                                "✗".to_string()
-                            };
-
-                            let version =
-                                tool.version.map_or("".to_string(), |v| format!(" ({})", v));
-
-                            // Print tool information
-                            println!(
-                                "    • {} [{}{}] - {}",
-                                tool.name, available, version, tool.description
-                            );
                         }
                     }
                 }
