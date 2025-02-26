@@ -86,6 +86,7 @@ where
             self.detector.clone(),
             self.tool_registry.clone(),
             self.output_formatter.clone(),
+            self.verbosity,
         );
 
         // Delegate to the FormatCommand
@@ -109,6 +110,7 @@ where
             self.detector.clone(),
             self.tool_registry.clone(),
             self.output_formatter.clone(),
+            self.verbosity,
         );
 
         // Delegate to the FixCommand

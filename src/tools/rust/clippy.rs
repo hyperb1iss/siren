@@ -226,6 +226,7 @@ impl Clippy {
         // If fixing, add the fix flag
         if fix_mode {
             command.arg("--fix");
+            command.arg("--allow-dirty");
         }
 
         // Add -- separator for clippy-specific arguments

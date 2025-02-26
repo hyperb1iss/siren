@@ -2,6 +2,8 @@
 
 use std::path::{Path, PathBuf};
 
+use crate::tools::LintTool;
+
 /// Collect files to check/fix/format based on provided paths and git modified flag
 pub fn collect_files_to_process(
     paths: &[PathBuf],
@@ -62,4 +64,16 @@ pub fn collect_files_to_process(
 
         Ok(all_files)
     }
+}
+
+/// Filter files to only include those that can be handled by the specified tool
+pub fn filter_files_for_tool<T>(files: &[PathBuf], tool: &T) -> Vec<PathBuf>
+where
+    T: LintTool + ?Sized,
+{
+    files
+        .iter()
+        .filter(|file| tool.can_handle(file))
+        .cloned()
+        .collect()
 }

@@ -163,6 +163,7 @@ impl DefaultToolRegistry {
         registry.register_tool(Arc::new(python::PyLint::new()));
         registry.register_tool(Arc::new(python::MyPy::new()));
         registry.register_tool(Arc::new(python::Black::new()));
+        registry.register_tool(Arc::new(python::RuffFormatter::new()));
 
         registry
     }

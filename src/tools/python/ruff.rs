@@ -297,3 +297,195 @@ impl LintTool for Ruff {
         utils::get_command_version("ruff", &["--version"])
     }
 }
+
+/// Ruff formatter for Python
+pub struct RuffFormatter {
+    base: ToolBase,
+}
+
+impl RuffFormatter {
+    /// Create a new Ruff formatter
+    pub fn new() -> Self {
+        Self {
+            base: ToolBase {
+                name: "ruff_formatter".to_string(),
+                description: "An extremely fast Python formatter, written in Rust".to_string(),
+                tool_type: ToolType::Formatter,
+                language: Language::Python,
+            },
+        }
+    }
+
+    /// Format files using Ruff
+    fn format_files(
+        &self,
+        files: &[PathBuf],
+        config: &ModelsToolConfig,
+    ) -> Result<(String, String), ToolError> {
+        // Skip if no files can be handled
+        let files_to_format: Vec<&Path> = files
+            .iter()
+            .filter(|file| self.can_handle(file))
+            .map(|file| file.as_path())
+            .collect();
+
+        if files_to_format.is_empty() {
+            return Ok((String::new(), String::new()));
+        }
+
+        let mut command = Command::new("ruff");
+        command.arg("format");
+
+        // Add check mode if requested
+        if config.check {
+            command.arg("--check");
+        }
+
+        // Set default line length to 88
+        let mut has_line_length = false;
+
+        // Add extra arguments
+        for arg in &config.extra_args {
+            if arg.starts_with("--line-length") {
+                has_line_length = true;
+            }
+            command.arg(arg);
+        }
+
+        // Add default line length if not specified
+        if !has_line_length {
+            command.arg("--line-length=88");
+        }
+
+        // Add all the files to format - explicitly pass each file path
+        for file in &files_to_format {
+            command.arg(file);
+        }
+
+        // Run the command
+        let output = command.output().map_err(|e| ToolError::ExecutionFailed {
+            name: self.name().to_string(),
+            message: format!("Failed to execute ruff format: {}", e),
+        })?;
+
+        // Parse the output
+        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+        Ok((stdout, stderr))
+    }
+}
+
+impl LintTool for RuffFormatter {
+    fn name(&self) -> &str {
+        &self.base.name
+    }
+
+    fn can_handle(&self, file_path: &Path) -> bool {
+        if let Some(ext) = file_path.extension() {
+            ext == "py" || ext == "pyi" || ext == "pyx"
+        } else {
+            false
+        }
+    }
+
+    fn execute(
+        &self,
+        files: &[PathBuf],
+        config: &ModelsToolConfig,
+    ) -> Result<LintResult, ToolError> {
+        let start = Instant::now();
+
+        // Format files
+        let (stdout, stderr) = self.format_files(files, config)?;
+
+        // Parse the output to determine if formatting is needed
+        let mut issues = Vec::new();
+
+        // When in check mode, ruff format will output "Would reformat X" for files that need formatting
+        if config.check && (stdout.contains("Would reformat") || stderr.contains("Would reformat"))
+        {
+            // Extract file paths that would be reformatted
+            let would_reformat_regex = Regex::new(r"Would reformat: (.+)").unwrap();
+
+            for line in stdout.lines().chain(stderr.lines()) {
+                if let Some(captures) = would_reformat_regex.captures(line) {
+                    if let Some(file_match) = captures.get(1) {
+                        let file_path = PathBuf::from(file_match.as_str());
+
+                        issues.push(LintIssue {
+                            severity: IssueSeverity::Style,
+                            message: "File needs formatting".to_string(),
+                            file: Some(file_path),
+                            line: None,
+                            column: None,
+                            code: None,
+                            fix_available: true,
+                        });
+                    }
+                }
+            }
+
+            // If we couldn't extract specific files but know formatting is needed
+            if issues.is_empty()
+                && (stdout.contains("would be reformatted")
+                    || stderr.contains("would be reformatted"))
+            {
+                // Add a generic issue for each file
+                for file in files {
+                    if self.can_handle(file) {
+                        issues.push(LintIssue {
+                            severity: IssueSeverity::Style,
+                            message: "File needs formatting".to_string(),
+                            file: Some(file.clone()),
+                            line: None,
+                            column: None,
+                            code: None,
+                            fix_available: true,
+                        });
+                    }
+                }
+            }
+        }
+
+        // Create a result with issues if formatting is needed
+        let result = LintResult {
+            tool_name: self.name().to_string(),
+            tool: Some(ToolInfo {
+                name: self.name().to_string(),
+                tool_type: self.tool_type(),
+                language: self.language(),
+                available: self.is_available(),
+                version: self.version(),
+                description: self.description().to_string(),
+            }),
+            success: true,
+            issues,
+            execution_time: start.elapsed(),
+            stdout: Some(stdout),
+            stderr: Some(stderr),
+        };
+
+        Ok(result)
+    }
+
+    fn tool_type(&self) -> ToolType {
+        self.base.tool_type
+    }
+
+    fn language(&self) -> Language {
+        self.base.language
+    }
+
+    fn description(&self) -> &str {
+        &self.base.description
+    }
+
+    fn is_available(&self) -> bool {
+        utils::is_command_available("ruff")
+    }
+
+    fn version(&self) -> Option<String> {
+        utils::get_command_version("ruff", &["--version"])
+    }
+}

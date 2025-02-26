@@ -10,14 +10,22 @@ mod tool_detection;
 /// Trait for detecting project information
 pub trait ProjectDetector {
     /// Detect project information from paths
-    fn detect(&self, paths: &[PathBuf]) -> Result<ProjectInfo, SirenError>;
+    ///
+    /// Returns a tuple containing:
+    /// - ProjectInfo: Information about the detected project
+    /// - Vec<PathBuf>: List of files collected during detection (respecting .gitignore)
+    fn detect(&self, paths: &[PathBuf]) -> Result<(ProjectInfo, Vec<PathBuf>), SirenError>;
 
     /// Detect project information with specific path patterns
+    ///
+    /// Returns a tuple containing:
+    /// - ProjectInfo: Information about the detected project
+    /// - Vec<PathBuf>: List of files collected during detection (respecting .gitignore)
     fn detect_with_patterns(
         &self,
         dir: &Path,
         patterns: &[String],
-    ) -> Result<ProjectInfo, SirenError>;
+    ) -> Result<(ProjectInfo, Vec<PathBuf>), SirenError>;
 }
 
 /// Default implementation of ProjectDetector
@@ -124,7 +132,7 @@ impl DefaultProjectDetector {
 }
 
 impl ProjectDetector for DefaultProjectDetector {
-    fn detect(&self, paths: &[PathBuf]) -> Result<ProjectInfo, SirenError> {
+    fn detect(&self, paths: &[PathBuf]) -> Result<(ProjectInfo, Vec<PathBuf>), SirenError> {
         if paths.is_empty() {
             return Err(DetectionError::InvalidDirectory(PathBuf::from(".")).into());
         }
@@ -132,6 +140,7 @@ impl ProjectDetector for DefaultProjectDetector {
         let mut languages = HashMap::new();
         let mut file_count = 0;
         let mut detected_tools = Vec::new();
+        let mut collected_files = Vec::new();
 
         // Process each path individually
         for path in paths {
@@ -143,6 +152,7 @@ impl ProjectDetector for DefaultProjectDetector {
             if path.is_file() {
                 // For a single file, just detect its language
                 file_count += 1;
+                collected_files.push(path.clone());
 
                 if let Some(ext) = path.extension() {
                     if let Some(lang) =
@@ -152,19 +162,19 @@ impl ProjectDetector for DefaultProjectDetector {
                     }
                 }
             } else if path.is_dir() {
-                // For directories, walk the directory tree
-                let walker = walkdir::WalkDir::new(path)
-                    .max_depth(self.max_depth)
-                    .into_iter()
-                    .filter_entry(|e| {
-                        // Skip hidden directories
-                        let filename = e.file_name().to_string_lossy();
-                        !filename.starts_with(".") || filename == "."
-                    });
+                // For directories, walk the directory tree using ignore::WalkBuilder to respect .gitignore
+                let walker = ignore::WalkBuilder::new(path)
+                    .hidden(false) // Don't ignore hidden files by default
+                    .git_ignore(true) // Respect .gitignore
+                    .git_global(true) // Respect global gitignore
+                    .git_exclude(true) // Respect .git/info/exclude
+                    .max_depth(Some(self.max_depth))
+                    .build();
 
                 for entry in walker.filter_map(Result::ok) {
-                    if entry.file_type().is_file() {
+                    if entry.file_type().map_or(false, |ft| ft.is_file()) {
                         file_count += 1;
+                        collected_files.push(entry.path().to_path_buf());
 
                         if let Some(ext) = entry.path().extension() {
                             if let Some(lang) =
@@ -214,19 +224,21 @@ impl ProjectDetector for DefaultProjectDetector {
             count_b.cmp(count_a)
         });
 
-        Ok(ProjectInfo {
+        let project_info = ProjectInfo {
             languages: language_list,
             frameworks,
             file_counts: languages,
             detected_tools,
-        })
+        };
+
+        Ok((project_info, collected_files))
     }
 
     fn detect_with_patterns(
         &self,
         dir: &Path,
         patterns: &[String],
-    ) -> Result<ProjectInfo, SirenError> {
+    ) -> Result<(ProjectInfo, Vec<PathBuf>), SirenError> {
         // Check if the directory exists
         if !dir.exists() {
             return Err(DetectionError::InvalidDirectory(dir.to_path_buf()).into());
@@ -245,16 +257,16 @@ impl ProjectDetector for DefaultProjectDetector {
 
         let mut languages = HashMap::new();
         let mut file_count = 0;
+        let mut collected_files = Vec::new();
 
-        // Walk directory tree and count files by language
-        let walker = walkdir::WalkDir::new(&base_dir)
-            .max_depth(self.max_depth)
-            .into_iter()
-            .filter_entry(|e| {
-                // Skip hidden directories
-                let filename = e.file_name().to_string_lossy();
-                !filename.starts_with(".") || filename == "."
-            });
+        // Walk directory tree using ignore::WalkBuilder to respect .gitignore
+        let walker = ignore::WalkBuilder::new(&base_dir)
+            .hidden(false) // Don't ignore hidden files by default
+            .git_ignore(true) // Respect .gitignore
+            .git_global(true) // Respect global gitignore
+            .git_exclude(true) // Respect .git/info/exclude
+            .max_depth(Some(self.max_depth))
+            .build();
 
         // First check if any of the paths are specific files
         let mut specific_files = Vec::new();
@@ -282,6 +294,7 @@ impl ProjectDetector for DefaultProjectDetector {
         // If we have specific files, count them by language
         for file_path in &specific_files {
             file_count += 1;
+            collected_files.push(file_path.clone());
 
             if let Some(ext) = file_path.extension() {
                 if let Some(lang) =
@@ -295,7 +308,7 @@ impl ProjectDetector for DefaultProjectDetector {
         // If we also have glob patterns or no specific files were found, scan the directory
         if has_glob_patterns || specific_files.is_empty() {
             for entry in walker.filter_map(Result::ok) {
-                if entry.file_type().is_file() {
+                if entry.file_type().map_or(false, |ft| ft.is_file()) {
                     // Skip if we're looking at specific files and this isn't one of them
                     if !specific_files.is_empty()
                         && !specific_files.contains(&entry.path().to_path_buf())
@@ -304,6 +317,7 @@ impl ProjectDetector for DefaultProjectDetector {
                     }
 
                     file_count += 1;
+                    collected_files.push(entry.path().to_path_buf());
 
                     if let Some(ext) = entry.path().extension() {
                         if let Some(lang) =
@@ -342,11 +356,13 @@ impl ProjectDetector for DefaultProjectDetector {
             count_b.cmp(count_a)
         });
 
-        Ok(ProjectInfo {
+        let project_info = ProjectInfo {
             languages: language_list,
             frameworks,
             file_counts: languages,
             detected_tools,
-        })
+        };
+
+        Ok((project_info, collected_files))
     }
 }

@@ -175,6 +175,22 @@ pub fn expand_glob_patterns(base_dir: &Path, patterns: &[PathBuf]) -> Vec<PathBu
 pub fn collect_files_with_gitignore(dir: &Path) -> Result<Vec<PathBuf>, crate::errors::SirenError> {
     let mut files = Vec::new();
 
+    // Debug: Print the directory we're scanning
+    eprintln!("DEBUG: Scanning directory: {:?}", dir);
+
+    // Check if .gitignore exists in the directory
+    let gitignore_path = dir.join(".gitignore");
+    if gitignore_path.exists() {
+        eprintln!("DEBUG: Found .gitignore at {:?}", gitignore_path);
+
+        // Print the contents of .gitignore for debugging
+        if let Ok(contents) = std::fs::read_to_string(&gitignore_path) {
+            eprintln!("DEBUG: .gitignore contents:\n{}", contents);
+        }
+    } else {
+        eprintln!("DEBUG: No .gitignore found at {:?}", gitignore_path);
+    }
+
     // Use ignore to respect gitignore rules
     let walker = ignore::WalkBuilder::new(dir)
         .hidden(false) // Don't ignore hidden files by default
@@ -183,8 +199,13 @@ pub fn collect_files_with_gitignore(dir: &Path) -> Result<Vec<PathBuf>, crate::e
         .git_exclude(true) // Respect .git/info/exclude
         .build();
 
+    // Debug: Count total files before filtering
+    let mut total_files = 0;
+    let mut ignored_files = 0;
+
     for entry in walker.filter_map(Result::ok) {
         let path = entry.path();
+        total_files += 1;
 
         // Skip the .git directory and its contents
         if path.components().any(|c| {
@@ -194,13 +215,24 @@ pub fn collect_files_with_gitignore(dir: &Path) -> Result<Vec<PathBuf>, crate::e
                 false
             }
         }) {
+            ignored_files += 1;
             continue;
+        }
+
+        // Debug: Check if this file is in target directory
+        if path.starts_with(dir.join("target")) {
+            eprintln!("DEBUG: Found file in target directory: {:?}", path);
         }
 
         if entry.file_type().map_or(false, |ft| ft.is_file()) {
             files.push(path.to_path_buf());
         }
     }
+
+    // Debug: Print summary
+    eprintln!("DEBUG: Total files scanned: {}", total_files);
+    eprintln!("DEBUG: Files ignored: {}", ignored_files);
+    eprintln!("DEBUG: Files collected: {}", files.len());
 
     Ok(files)
 }

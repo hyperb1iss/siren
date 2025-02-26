@@ -65,7 +65,7 @@ where
         };
 
         // Detect project information
-        let project_info = if !patterns.is_empty() {
+        let (project_info, _) = if !patterns.is_empty() {
             self.detector.detect_with_patterns(dir, &patterns)?
         } else {
             self.detector.detect(&paths_to_detect)?

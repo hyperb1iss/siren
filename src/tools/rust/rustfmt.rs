@@ -34,8 +34,9 @@ impl Rustfmt {
         file: &Path,
         config: &ModelsToolConfig,
     ) -> Result<Vec<LintIssue>, ToolError> {
-        // Get the project root directory (assuming it contains a Cargo.toml)
-        let project_root = self.find_cargo_toml_dir(file)?;
+        // Always use the current directory as the project root
+        // This assumes we're running from the project root
+        let project_root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
 
         // Build cargo fmt command
         let mut command = Command::new("cargo");
@@ -52,12 +53,14 @@ impl Rustfmt {
             command.arg(arg);
         }
 
-        // Add the file to format (as a relative path from project root)
-        if let Some(rel_path) = pathdiff::diff_paths(file, &project_root) {
-            command.arg(rel_path);
+        // Add the file to format - use the absolute path to avoid path resolution issues
+        let abs_file_path = if file.is_absolute() {
+            file.to_path_buf()
         } else {
-            command.arg(file);
-        }
+            project_root.join(file)
+        };
+
+        command.arg(&abs_file_path);
 
         // Run the command
         let output = command.output().map_err(|e| ToolError::ExecutionFailed {
@@ -85,8 +88,9 @@ impl Rustfmt {
 
     /// Fix formatting issues with rustfmt
     fn fix_file(&self, file: &Path, config: &ModelsToolConfig) -> Result<(), ToolError> {
-        // Get the project root directory (assuming it contains a Cargo.toml)
-        let project_root = self.find_cargo_toml_dir(file)?;
+        // Always use the current directory as the project root
+        // This assumes we're running from the project root
+        let project_root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
 
         // Build cargo fmt command
         let mut command = Command::new("cargo");
@@ -103,12 +107,14 @@ impl Rustfmt {
             command.arg(arg);
         }
 
-        // Add the file to format (as a relative path from project root)
-        if let Some(rel_path) = pathdiff::diff_paths(file, &project_root) {
-            command.arg(rel_path);
+        // Add the file to format - use the absolute path to avoid path resolution issues
+        let abs_file_path = if file.is_absolute() {
+            file.to_path_buf()
         } else {
-            command.arg(file);
-        }
+            project_root.join(file)
+        };
+
+        command.arg(&abs_file_path);
 
         // Run the command
         let output = command.output().map_err(|e| ToolError::ExecutionFailed {
@@ -126,30 +132,6 @@ impl Rustfmt {
         }
 
         Ok(())
-    }
-
-    /// Find the directory containing Cargo.toml by walking up the directory tree
-    fn find_cargo_toml_dir(&self, file_path: &Path) -> Result<PathBuf, ToolError> {
-        let file_dir = if file_path.is_file() {
-            file_path.parent().unwrap_or(Path::new("."))
-        } else {
-            file_path
-        };
-
-        let mut current_dir = Some(file_dir.to_path_buf());
-
-        while let Some(dir) = current_dir {
-            let cargo_toml = dir.join("Cargo.toml");
-            if cargo_toml.exists() {
-                return Ok(dir);
-            }
-
-            // Move up to parent directory
-            current_dir = dir.parent().map(|p| p.to_path_buf());
-        }
-
-        // If we can't find a Cargo.toml, use the current directory
-        Ok(PathBuf::from("."))
     }
 }
 

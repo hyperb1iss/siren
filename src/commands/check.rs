@@ -1,20 +1,19 @@
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::cli::{CheckArgs, Verbosity};
-use crate::config::SirenConfig;
+use crate::config::{SirenConfig, ToolConfig as ConfigToolConfig};
 use crate::detection::ProjectDetector;
 use crate::errors::SirenError;
 use crate::models::tools::ToolConfig;
-use crate::models::{ProjectInfo, ToolType};
-use crate::output::terminal;
-use crate::output::OutputFormatter;
+use crate::models::ToolType;
+use crate::output::{terminal, OutputFormatter};
 use crate::runner::ToolRunner;
 use crate::tools::{LintTool, ToolRegistry};
 use crate::utils::file_selection;
 use colored::*;
-use log::{debug, warn};
+use log::debug;
 
 /// Command handler for the check (lint) command
 pub struct CheckCommand<D, R, O>
@@ -68,14 +67,8 @@ where
             args_paths
         };
 
-        // Get project root directory
-        let _dir = all_paths
-            .first()
-            .map(|p| p.as_path())
-            .unwrap_or_else(|| Path::new("."));
-
         // Detect project information
-        let project_info = self.detect_project(&all_paths)?;
+        let (project_info, detected_files) = self.detector.detect(&all_paths)?;
 
         // Display detected project info based on verbosity
         if self.verbosity >= Verbosity::Normal {
@@ -83,25 +76,75 @@ where
             println!("{}", info_output);
         }
 
-        // Select appropriate tools based on project_info and args
-        let tools = self.select_tools_for_check(&project_info, &args, config)?;
+        // Print detected languages based on verbosity
+        if self.verbosity >= Verbosity::Normal {
+            println!("🔍 Detected languages: {:?}", project_info.languages);
+        }
+
+        // Select appropriate linting tools
+        let mut linters = Vec::new();
+        for language in &project_info.languages {
+            if self.verbosity >= Verbosity::Normal {
+                println!("  Looking for linters for {:?}...", language);
+            }
+
+            let language_linters = self
+                .tool_registry
+                .get_tools_for_language_and_type(*language, ToolType::Linter);
+
+            if self.verbosity >= Verbosity::Normal {
+                println!(
+                    "  Found {} linters for {:?}",
+                    language_linters.len(),
+                    language
+                );
+
+                for linter in &language_linters {
+                    println!(
+                        "    - {} (available: {})",
+                        linter.name(),
+                        linter.is_available()
+                    );
+                }
+            }
+
+            for linter in language_linters {
+                if linter.is_available() {
+                    linters.push(linter);
+                } else if self.verbosity >= Verbosity::Normal {
+                    println!("⚠️ Skipping unavailable linter: {}", linter.name());
+                }
+            }
+        }
+
+        if linters.is_empty() {
+            println!("⚠️ No linters found for the detected languages.");
+            return Ok(());
+        }
+
+        // Use the files collected during detection if not using git-modified-only
+        let files_to_check = if git_modified_only {
+            // For git-modified-only, we still need to use the file_selection utility
+            file_selection::collect_files_to_process(&all_paths, git_modified_only)?
+        } else {
+            // Reuse the files collected during detection
+            detected_files
+        };
+
+        // Debug output for files to check
+        if self.verbosity >= Verbosity::Normal {
+            println!("📂 Found {} files to check:", files_to_check.len());
+
+            if self.verbosity >= Verbosity::Verbose {
+                for file in &files_to_check {
+                    println!("  - {}", file.display());
+                }
+            }
+        }
 
         // Count files by language for information purposes
         let _total_files: usize = project_info.file_counts.values().sum();
         let _files_by_language = project_info.file_counts.clone();
-
-        // Collect files to check using our shared utility
-        let files_to_check =
-            file_selection::collect_files_to_process(&all_paths, git_modified_only)?;
-
-        // Debug output for files to check
-        if self.verbosity >= Verbosity::Verbose {
-            println!("\nFiles to check: {}", files_to_check.len());
-            for file in &files_to_check {
-                println!("  - {}", file.display());
-            }
-            println!();
-        }
 
         // Get default tool config
         let default_tool_config = config.tools.get("default").cloned().unwrap_or_default();
@@ -126,7 +169,7 @@ where
         let mut tool_groups: HashMap<String, ToolGroup> = HashMap::new();
 
         // Set up all tools first and group them by config
-        for linter in &tools {
+        for linter in &linters {
             // Get tool-specific config or use default
             let mut config_tool_config = config
                 .tools
@@ -138,7 +181,7 @@ where
             config_tool_config.auto_fix = Some(args.auto_fix);
 
             // Convert to the correct ToolConfig type for the runner
-            let config_for_runner = convert_tool_config(&config_tool_config);
+            let config_for_runner = self.convert_tool_config(&config_tool_config);
 
             // Create a simple hash of the config to use as a key for grouping
             // This is a simplification - in a real implementation we might want a better way to compare configs
@@ -190,7 +233,7 @@ where
                 .cloned()
                 .unwrap_or_else(|| default_tool_config.clone());
             config_tool_config.auto_fix = Some(args.auto_fix);
-            let config_for_runner = convert_tool_config(&config_tool_config);
+            let config_for_runner = self.convert_tool_config(&config_tool_config);
 
             // Run all tools in this group in parallel
             let group_results = tool_runner
@@ -305,132 +348,16 @@ where
         Ok(())
     }
 
-    /// Detect project information from the provided paths
-    fn detect_project(&self, paths: &[PathBuf]) -> Result<ProjectInfo, SirenError> {
-        self.detector.detect(paths)
-    }
-
-    /// Select appropriate tools for checking based on project info and arguments
-    fn select_tools_for_check(
-        &self,
-        project_info: &ProjectInfo,
-        args: &CheckArgs,
-        _config: &SirenConfig,
-    ) -> Result<Vec<Arc<dyn LintTool>>, SirenError> {
-        let mut selected_tools = Vec::new();
-
-        // Debug - Print all languages detected only in verbose mode
-        if self.verbosity >= Verbosity::Verbose {
-            debug!("Detected languages: {:?}", project_info.languages);
+    /// Convert from ConfigToolConfig to ToolConfig
+    fn convert_tool_config(&self, config: &ConfigToolConfig) -> ToolConfig {
+        ToolConfig {
+            enabled: config.enabled,
+            extra_args: config.extra_args.clone().unwrap_or_default(),
+            env_vars: std::collections::HashMap::new(),
+            executable_path: None,
+            report_level: None,
+            auto_fix: config.auto_fix.unwrap_or(false),
+            check: config.check.unwrap_or(false),
         }
-
-        // If specific tools are requested, use those
-        if let Some(tool_names) = &args.tools {
-            if self.verbosity >= Verbosity::Verbose {
-                debug!("Specific tools requested: {:?}", tool_names);
-            }
-            for name in tool_names {
-                if let Some(tool) = self.tool_registry.get_tool_by_name(name) {
-                    if self.verbosity >= Verbosity::Verbose {
-                        debug!("Found tool '{}', available: {}", name, tool.is_available());
-                    }
-                    selected_tools.push(tool);
-                } else if self.verbosity >= Verbosity::Normal {
-                    warn!("⚠️ Tool '{}' not found", name);
-                }
-            }
-            return Ok(selected_tools);
-        }
-
-        // If specific tool types are requested, use those
-        if let Some(type_names) = &args.tool_types {
-            for type_name in type_names {
-                let tool_type = match type_name.to_lowercase().as_str() {
-                    "formatter" => ToolType::Formatter,
-                    "linter" => ToolType::Linter,
-                    "typechecker" => ToolType::TypeChecker,
-                    "fixer" => ToolType::Fixer,
-                    _ => {
-                        if self.verbosity >= Verbosity::Normal {
-                            eprintln!("⚠️ Unknown tool type: {}", type_name);
-                        }
-                        continue;
-                    }
-                };
-
-                let tools = self.tool_registry.get_tools_by_type(tool_type);
-                selected_tools.extend(tools);
-            }
-            return Ok(selected_tools);
-        }
-
-        // Otherwise, select tools based on detected languages
-        if self.verbosity >= Verbosity::Verbose {
-            eprintln!("Selecting tools based on detected languages");
-        }
-        for language in &project_info.languages {
-            if self.verbosity >= Verbosity::Verbose {
-                debug!("Getting tools for language: {:?}", language);
-            }
-            let language_tools = self.tool_registry.get_tools_for_language(*language);
-            if self.verbosity >= Verbosity::Verbose {
-                debug!("Found {} tools for {:?}", language_tools.len(), language);
-            }
-
-            // For general check, prefer linters and type checkers
-            let filtered_tools: Vec<_> = language_tools
-                .into_iter()
-                .filter(|tool| {
-                    let tool_type = tool.tool_type();
-                    let available = tool.is_available();
-                    if self.verbosity >= Verbosity::Verbose {
-                        debug!(
-                            "  - Tool: {}, Type: {:?}, Available: {}",
-                            tool.name(),
-                            tool_type,
-                            available
-                        );
-                    }
-                    (tool_type == ToolType::Linter || tool_type == ToolType::TypeChecker)
-                        && available
-                })
-                .collect();
-
-            if self.verbosity >= Verbosity::Verbose {
-                debug!("Selected {} tools after filtering", filtered_tools.len());
-            }
-            selected_tools.extend(filtered_tools);
-        }
-
-        // If strict mode, add additional strict tools
-        if args.strict {
-            // TODO: Add strictness logic here
-        }
-
-        // Debug - Print selected tools only in verbose mode
-        if self.verbosity >= Verbosity::Verbose {
-            debug!("Final selected tools: {}", selected_tools.len());
-            for tool in &selected_tools {
-                debug!("  - {}, Available: {}", tool.name(), tool.is_available());
-            }
-        }
-
-        Ok(selected_tools)
-    }
-}
-
-// Helper function to convert from config::ToolConfig to models::tools::ToolConfig
-fn convert_tool_config(config: &crate::config::ToolConfig) -> ToolConfig {
-    ToolConfig {
-        enabled: config.enabled,
-        extra_args: config.extra_args.clone().unwrap_or_default(),
-        env_vars: HashMap::new(),
-        executable_path: config
-            .config_file
-            .clone()
-            .map(|p| p.to_string_lossy().to_string()),
-        report_level: None,
-        auto_fix: config.auto_fix.unwrap_or(false),
-        check: config.check.unwrap_or(false),
     }
 }
