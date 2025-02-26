@@ -202,7 +202,7 @@ impl OutputFormatter for PrettyFormatter {
                         let relative_path = make_relative_path(file);
                         output.push_str(&format!("  {}\n", relative_path.display()));
                     }
-                    output.push_str("\n");
+                    output.push('\n');
                     continue;
                 }
             }
@@ -231,7 +231,7 @@ impl OutputFormatter for PrettyFormatter {
                                     output.push_str(&format!("  {}\n", relative_path.display()));
                                 }
                             }
-                            output.push_str("\n");
+                            output.push('\n');
                         }
                         continue;
                     }
@@ -551,7 +551,7 @@ impl OutputFormatter for PrettyFormatter {
                         .bold()
                         .to_string(),
                 );
-                output.push_str("\n");
+                output.push('\n');
             } else {
                 // Get relative paths for better readability
                 let relative_formatted_files: Vec<_> = formatted_files
@@ -569,7 +569,7 @@ impl OutputFormatter for PrettyFormatter {
                         .bold()
                         .to_string(),
                 );
-                output.push_str("\n");
+                output.push('\n');
 
                 // Optionally display the list of formatted files (for detailed view)
                 if count <= 5 {
@@ -584,7 +584,7 @@ impl OutputFormatter for PrettyFormatter {
                             .dimmed()
                             .to_string(),
                     );
-                    output.push_str("\n");
+                    output.push('\n');
                 }
             }
         } else {

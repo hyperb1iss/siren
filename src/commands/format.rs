@@ -10,6 +10,7 @@ use crate::output::{terminal, OutputFormatter};
 use crate::runner::ToolRunner;
 use crate::tools::ToolRegistry;
 use crate::utils::file_selection;
+use colored::*;
 use log::debug;
 
 /// Command handler for the format command
@@ -185,18 +186,26 @@ where
             return Ok(());
         }
 
+        // Store formatter and spinner index pairs
+        let mut formatter_spinners = Vec::new();
+
         // Setup formatters in the UI
         for formatter in &available_formatters {
             let language = format!("{:?}", formatter.language());
             let tool_type = format!("{:?}", formatter.tool_type());
-            status_display.add_tool_status(formatter.name(), &language, &tool_type);
+            let spinner_index =
+                status_display.add_tool_status(formatter.name(), &language, &tool_type);
+            formatter_spinners.push((formatter.clone(), spinner_index));
         }
+
+        // Add a small delay to ensure we can see the spinners before they complete
+        std::thread::sleep(std::time::Duration::from_millis(800));
 
         // Run each formatter with its filtered files
         let mut all_results = Vec::new();
         let mut total_issues = 0;
 
-        for formatter in &available_formatters {
+        for (formatter, spinner_index) in &formatter_spinners {
             // Filter files for this specific formatter
             let files_for_formatter =
                 file_selection::filter_files_for_tool(&all_files, &**formatter);
@@ -205,6 +214,11 @@ where
                 if self.verbosity >= Verbosity::Normal {
                     debug!("No files for formatter: {}", formatter.name());
                 }
+                // Update spinner to show no files found
+                status_display.finish_spinner(
+                    *spinner_index,
+                    format!("{} 「{}」", formatter.name(), "no matching files".yellow()),
+                );
                 continue;
             }
 
@@ -275,6 +289,23 @@ where
                             }
                         }
 
+                        // Update spinner with the result
+                        if issue_count > 0 {
+                            status_display.finish_spinner(
+                                *spinner_index,
+                                format!(
+                                    "{} 「{}」",
+                                    formatter.name(),
+                                    format!("{} files formatted", issue_count).green()
+                                ),
+                            );
+                        } else {
+                            status_display.finish_spinner(
+                                *spinner_index,
+                                format!("{} 「{}」", formatter.name(), "no changes needed".blue()),
+                            );
+                        }
+
                         if self.verbosity >= Verbosity::Verbose {
                             debug!("{} completed with {} issues", result.tool_name, issue_count);
                         }
@@ -283,6 +314,12 @@ where
                         all_results.push(result);
                     }
                     Err(err) => {
+                        // Update spinner with the error
+                        status_display.finish_spinner(
+                            *spinner_index,
+                            format!("{} 「{}」", formatter.name(), "execution failed".red()),
+                        );
+
                         debug!("Error running formatter {}: {}", formatter.name(), err);
 
                         if self.verbosity >= Verbosity::Normal {
@@ -299,8 +336,8 @@ where
         // A moment to appreciate the UI
         std::thread::sleep(std::time::Duration::from_millis(300));
 
-        // Format and display results
-        if !all_results.is_empty() {
+        // Format and display results only if there are issues or in verbose mode
+        if !all_results.is_empty() && (total_issues > 0 || self.verbosity >= Verbosity::Verbose) {
             // Format results
             let results_output = self
                 .output_formatter
@@ -309,8 +346,9 @@ where
 
             // Display summary
             println!("\n{}", self.output_formatter.format_summary(&all_results));
-        } else {
-            println!("\n✨ No formatting issues found!");
+        } else if total_issues > 0 {
+            // Just show a simple summary if there are issues but we're not showing details
+            println!("\n✨ {} files were formatted!", total_issues);
         }
 
         Ok(())

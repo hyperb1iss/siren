@@ -1,6 +1,10 @@
 use chrono;
 use colored::Colorize;
 use console::Style;
+use std::io::{stdout, Write};
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::Duration;
 
 /// Terminal UI utilities for Siren
 pub struct EnchantedColors;
@@ -171,11 +175,27 @@ pub fn error_panel(title: &str, message: &str, details: Option<&str>) {
     println!("{}", error_style.apply_to(format!("╚{}╝", separator)));
 }
 
+/// Spinner status enum
+#[derive(Clone)]
+enum SpinnerStatus {
+    Active,
+    Success(String),
+    Warning(String),
+    Error(String),
+}
+
 /// Status display with a clean, consistent theme
-#[derive(Default)]
 pub struct NeonDisplay {
-    tool_statuses: Vec<String>,
+    spinner_states: Arc<Mutex<Vec<(String, SpinnerStatus)>>>,
+    render_thread: Option<thread::JoinHandle<()>>,
+    running: Arc<Mutex<bool>>,
     issues_count: usize,
+}
+
+impl Default for NeonDisplay {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl NeonDisplay {
@@ -196,43 +216,213 @@ impl NeonDisplay {
             "Analyzing codebase for quality issues...".bright_white()
         );
 
+        // Add a blank line before spinners start
+        println!();
+
+        // Create shared state
+        let spinner_states = Arc::new(Mutex::new(Vec::new()));
+        let running = Arc::new(Mutex::new(true));
+
+        // Clone for the render thread
+        let spinner_states_clone = Arc::clone(&spinner_states);
+        let running_clone = Arc::clone(&running);
+
+        // Start the render thread
+        let render_thread = thread::spawn(move || {
+            let frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+            let mut frame_index = 0;
+
+            // Keep track of the number of lines we've printed
+            let mut last_render_count = 0;
+
+            while *running_clone.lock().unwrap() {
+                // Get the current state
+                let states = spinner_states_clone.lock().unwrap().clone();
+
+                // If we have nothing to render, sleep and continue
+                if states.is_empty() {
+                    thread::sleep(Duration::from_millis(100));
+                    continue;
+                }
+
+                // Clear previous render by moving cursor up and erasing lines
+                for _ in 0..last_render_count {
+                    print!("\x1B[1A"); // Move up one line
+                    print!("\x1B[2K"); // Clear entire line
+                }
+
+                // Count how many lines we'll render this time
+                let mut render_count = 0;
+
+                // Render all spinners
+                for (message, status) in &states {
+                    match status {
+                        SpinnerStatus::Active => {
+                            // Active spinner with animation
+                            println!("{} {}", frames[frame_index].bright_cyan(), message);
+                        }
+                        SpinnerStatus::Success(details) => {
+                            // Success with checkmark
+                            println!(
+                                "{} {} {}",
+                                "✓".bright_green(),
+                                message,
+                                details.bright_green()
+                            );
+                        }
+                        SpinnerStatus::Warning(details) => {
+                            // Warning with warning symbol
+                            println!("{} {} {}", "⚠".yellow(), message, details.yellow());
+                        }
+                        SpinnerStatus::Error(details) => {
+                            // Error with x mark
+                            println!("{} {} {}", "✗".bright_red(), message, details.bright_red());
+                        }
+                    }
+                    render_count += 1;
+                }
+
+                // Update frame index
+                frame_index = (frame_index + 1) % frames.len();
+
+                // Remember how many lines we rendered
+                last_render_count = render_count;
+
+                // Flush output
+                stdout().flush().unwrap_or(());
+
+                // Sleep briefly
+                thread::sleep(Duration::from_millis(80));
+            }
+
+            // Final render of all spinners
+            let states = spinner_states_clone.lock().unwrap().clone();
+
+            // Clear previous render
+            for _ in 0..last_render_count {
+                print!("\x1B[1A"); // Move up one line
+                print!("\x1B[2K"); // Clear entire line
+            }
+
+            // Print all spinners in their final state
+            for (message, status) in states {
+                match status {
+                    SpinnerStatus::Active => {
+                        // Show completed for any remaining active spinners
+                        println!(
+                            "{} {} {}",
+                            "✓".bright_green(),
+                            message,
+                            "completed".bright_green()
+                        );
+                    }
+                    SpinnerStatus::Success(details) => {
+                        println!(
+                            "{} {} {}",
+                            "✓".bright_green(),
+                            message,
+                            details.bright_green()
+                        );
+                    }
+                    SpinnerStatus::Warning(details) => {
+                        println!("{} {} {}", "⚠".yellow(), message, details.yellow());
+                    }
+                    SpinnerStatus::Error(details) => {
+                        println!("{} {} {}", "✗".bright_red(), message, details.bright_red());
+                    }
+                }
+            }
+        });
+
         Self {
-            tool_statuses: Vec::new(),
+            spinner_states,
+            render_thread: Some(render_thread),
+            running,
             issues_count: 0,
         }
     }
 
     /// Add a tool status to the display
     pub fn add_tool_status(&mut self, tool_name: &str, language: &str, tool_type: &str) -> usize {
-        let index = self.tool_statuses.len();
-
         // Create a cleaner status message with less redundancy
-        let message = format!(
-            "⚡ {} {}",
+        let status_message = format!(
+            "{} {}",
             tool_name.bright_magenta(),
             format!("({} {})", language, tool_type).bright_blue()
         );
 
-        // Print the initial status message
-        println!("{}", message);
-
-        // Store the message
-        self.tool_statuses.push(message);
+        // Add to spinner states
+        let mut states = self.spinner_states.lock().unwrap();
+        let index = states.len();
+        states.push((status_message, SpinnerStatus::Active));
 
         index
     }
 
     /// Finish a specific tool with a result message
     pub fn finish_spinner(&mut self, index: usize, message: String) {
-        if index < self.tool_statuses.len() {
-            self.tool_statuses[index] = message.clone();
-            // Don't print the message again - it will be shown in the summary
+        // Update the spinner state
+        let mut states = self.spinner_states.lock().unwrap();
+        if index < states.len() {
+            // Parse the message to determine the status
+            let (message_text, status) = if message.contains("no changes needed") {
+                // No changes needed - show as info/success
+                let details = "「no changes needed」".to_string();
+                (states[index].0.clone(), SpinnerStatus::Success(details))
+            } else if message.contains("files formatted") || message.contains("beautified") {
+                // Files were formatted - show as success with count
+                let details = if let Some(count) = message
+                    .split_whitespace()
+                    .find(|s| s.parse::<usize>().is_ok())
+                {
+                    format!("「{} files formatted」", count)
+                } else {
+                    "「files formatted」".to_string()
+                };
+                (states[index].0.clone(), SpinnerStatus::Success(details))
+            } else if message.contains("issues found") || message.contains("warnings") {
+                // Issues found - show as warning
+                let details = if let Some(count) = message
+                    .split_whitespace()
+                    .find(|s| s.parse::<usize>().is_ok())
+                {
+                    format!("「{} issues found」", count)
+                } else {
+                    "「issues found」".to_string()
+                };
+                (states[index].0.clone(), SpinnerStatus::Warning(details))
+            } else if message.contains("failed") || message.contains("error") {
+                // Error occurred - show as error
+                let details = "「execution failed」".to_string();
+                (states[index].0.clone(), SpinnerStatus::Error(details))
+            } else {
+                // Default to success
+                let details = "「completed」".to_string();
+                (states[index].0.clone(), SpinnerStatus::Success(details))
+            };
+
+            // Update the spinner state
+            states[index] = (message_text, status);
+
+            // Add a small delay to make the status change more visible
+            drop(states);
+            std::thread::sleep(std::time::Duration::from_millis(300));
         }
     }
 
     /// Finish all tools and show the footer
     pub fn finish(&mut self, total_issues: usize) {
         self.issues_count = total_issues;
+
+        // Signal the render thread to stop
+        if let Ok(mut running) = self.running.lock() {
+            *running = false;
+        }
+
+        // Wait for the render thread to finish
+        if let Some(handle) = self.render_thread.take() {
+            let _ = handle.join();
+        }
 
         // Display elegant footer
         let now = chrono::Local::now();
@@ -244,5 +434,19 @@ impl NeonDisplay {
         );
 
         // We'll skip printing the issue count here since it will be in the summary
+    }
+}
+
+impl Drop for NeonDisplay {
+    fn drop(&mut self) {
+        // Signal the render thread to stop
+        if let Ok(mut running) = self.running.lock() {
+            *running = false;
+        }
+
+        // Wait for the render thread to finish
+        if let Some(handle) = self.render_thread.take() {
+            let _ = handle.join();
+        }
     }
 }
