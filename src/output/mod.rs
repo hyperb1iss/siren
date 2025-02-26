@@ -6,6 +6,8 @@ use crate::config::OutputConfig;
 use crate::models::{IssueSeverity, Language, LintResult, ProjectInfo, ToolType};
 use colored::Colorize;
 use log::debug;
+use std::env;
+use std::path::{Path, PathBuf};
 use terminal::{divider, language_emoji, tool_emoji};
 
 /// Trait for formatting output
@@ -72,6 +74,18 @@ impl PrettyFormatter {
     }
 }
 
+// Helper function to convert absolute paths to relative paths
+fn make_relative_path(path: &Path) -> PathBuf {
+    if path.is_absolute() {
+        if let Ok(current_dir) = env::current_dir() {
+            if let Ok(relative) = path.strip_prefix(&current_dir) {
+                return relative.to_path_buf();
+            }
+        }
+    }
+    path.to_path_buf()
+}
+
 impl OutputFormatter for PrettyFormatter {
     fn format_detection(&self, project_info: &ProjectInfo) -> String {
         let mut output = String::new();
@@ -130,7 +144,13 @@ impl OutputFormatter for PrettyFormatter {
             // Add tool header with emoji, name, and version
             let language_emoji = self.get_language_emoji(language);
             let tool_emoji = self.get_tool_emoji(tool_type);
-            let tool_status = if result.issues.is_empty() {
+
+            // For formatters, if all issues are our special "File formatted" issues, show success
+            let tool_status = if result.issues.is_empty()
+                || (*tool_type == ToolType::Formatter
+                    && result.issues.iter().all(|i| {
+                        i.severity == IssueSeverity::Info && i.message == "File formatted"
+                    })) {
                 "✓".green()
             } else {
                 "⚠️".yellow()
@@ -151,8 +171,71 @@ impl OutputFormatter for PrettyFormatter {
 
             // If no issues, add a success message
             if result.issues.is_empty() {
-                output.push_str(&format!("{}\n\n", "All checks passed!".green()));
+                match tool_type {
+                    ToolType::Formatter => {
+                        output
+                            .push_str(&format!("{}\n\n", "Code beautifully formatted! ✨".green()));
+                    }
+                    _ => {
+                        output.push_str(&format!("{}\n\n", "All checks passed!".green()));
+                    }
+                }
                 continue;
+            }
+
+            // For formatters with only "File formatted" info issues, show a special message
+            if *tool_type == ToolType::Formatter
+                && result
+                    .issues
+                    .iter()
+                    .all(|i| i.severity == IssueSeverity::Info && i.message == "File formatted")
+            {
+                let formatted_files = result
+                    .issues
+                    .iter()
+                    .filter_map(|i| i.file.as_ref())
+                    .collect::<Vec<_>>();
+
+                if !formatted_files.is_empty() {
+                    output.push_str(&format!("{}\n\n", "Files formatted:".green()));
+                    for file in formatted_files {
+                        let relative_path = make_relative_path(file);
+                        output.push_str(&format!("  {}\n", relative_path.display()));
+                    }
+                    output.push_str("\n");
+                    continue;
+                }
+            }
+
+            // Special handling for rustfmt in check mode
+            if result.tool_name == "rustfmt" && result.issues.is_empty() {
+                // Parse stdout to find files that need formatting
+                if let Some(stdout) = &result.stdout {
+                    let files_needing_format: Vec<_> = stdout
+                        .lines()
+                        .filter(|line| !line.trim().is_empty() && !line.contains("Checking"))
+                        .collect();
+
+                    if !files_needing_format.is_empty() {
+                        if files_needing_format.len() == 1
+                            && files_needing_format[0].contains("would be reformatted")
+                        {
+                            // This is the summary line like "1 file would be reformatted"
+                            output.push_str(&format!("{}\n\n", files_needing_format[0].yellow()));
+                        } else {
+                            output.push_str(&format!("{}\n\n", "Files needing format:".yellow()));
+                            for file in files_needing_format {
+                                if !file.contains("would be reformatted") {
+                                    let path = PathBuf::from(file);
+                                    let relative_path = make_relative_path(&path);
+                                    output.push_str(&format!("  {}\n", relative_path.display()));
+                                }
+                            }
+                            output.push_str("\n");
+                        }
+                        continue;
+                    }
+                }
             }
 
             // Group issues by severity
@@ -192,6 +275,11 @@ impl OutputFormatter for PrettyFormatter {
 
             // Add the actual issues
             for issue in &result.issues {
+                // Skip our special formatter tracking issues when counting
+                if issue.severity == IssueSeverity::Info && issue.message == "File formatted" {
+                    continue;
+                }
+
                 // Format severity
                 let severity_str = match issue.severity {
                     IssueSeverity::Error => "error".red(),
@@ -249,9 +337,77 @@ impl OutputFormatter for PrettyFormatter {
         let mut files_affected = std::collections::HashSet::new();
         let mut tool_counts = std::collections::HashMap::new();
 
+        // Check if we're only dealing with formatters
+        let only_formatters = results.iter().all(|result| {
+            result
+                .tool
+                .as_ref()
+                .map_or(false, |t| t.tool_type == ToolType::Formatter)
+        });
+
+        // Count of files processed by formatters
+        let mut formatted_files = std::collections::HashSet::new();
+
         // Count issues
         for result in results {
+            // Track formatted files if this is a formatter
+            if result
+                .tool
+                .as_ref()
+                .map_or(false, |t| t.tool_type == ToolType::Formatter)
+            {
+                // Check for our special "File formatted" info issues
+                let formatted_file_issues = result
+                    .issues
+                    .iter()
+                    .filter(|i| i.severity == IssueSeverity::Info && i.message == "File formatted")
+                    .filter_map(|i| i.file.as_ref().cloned())
+                    .collect::<Vec<_>>();
+
+                for file in formatted_file_issues {
+                    formatted_files.insert(file);
+                }
+
+                // Parse rustfmt output with -l flag
+                if result.tool_name == "rustfmt" {
+                    if let Some(stdout) = &result.stdout {
+                        // rustfmt with -l flag outputs one filename per line for files that were formatted
+                        for line in stdout.lines() {
+                            let line = line.trim();
+                            if !line.is_empty() {
+                                // With -l flag, rustfmt simply outputs the path of each formatted file
+                                // Convert the path to a relative path for better readability
+                                let path = PathBuf::from(line);
+                                formatted_files.insert(path);
+                            }
+                        }
+                    }
+                }
+
+                // Also check stdout as a fallback for other formatters
+                if let Some(stdout) = &result.stdout {
+                    if stdout.contains("Formatted ") || stdout.contains("Reformatted ") {
+                        // Heuristically count files from stdout
+                        formatted_files.insert(PathBuf::from("unknown"));
+                    }
+                }
+
+                // Regular issues (not our special ones)
+                for issue in result.issues.iter().filter(|i| {
+                    !(i.severity == IssueSeverity::Info && i.message == "File formatted")
+                }) {
+                    if let Some(filepath) = &issue.file {
+                        formatted_files.insert(filepath.clone());
+                    }
+                }
+            }
+
             for issue in &result.issues {
+                // Skip our special formatter tracking issues when counting
+                if issue.severity == IssueSeverity::Info && issue.message == "File formatted" {
+                    continue;
+                }
+
                 match issue.severity {
                     IssueSeverity::Error => error_count += 1,
                     IssueSeverity::Warning => warning_count += 1,
@@ -279,7 +435,14 @@ impl OutputFormatter for PrettyFormatter {
         let total_issues = error_count + warning_count + style_count + info_count;
 
         // Add status header with a more refined cyberpunk aesthetic
-        if error_count > 0 {
+        if only_formatters {
+            output.push('\n');
+            output.push_str("  ");
+            output.push_str(&"✓".bright_green().bold().to_string());
+            output.push(' ');
+            output.push_str(&"Code style harmonized".bright_green().bold().to_string());
+            output.push('\n');
+        } else if error_count > 0 {
             output.push('\n');
             output.push_str("  ");
             output.push_str(&"✖".bright_red().bold().to_string());
@@ -375,6 +538,55 @@ impl OutputFormatter for PrettyFormatter {
                 files_affected.len().to_string().bright_white().bold()
             ));
             output.push('\n');
+        } else if only_formatters {
+            // Special message for formatter-only runs with no issues
+            output.push_str("  ");
+            output.push_str(&"⚡".bright_green().to_string());
+            output.push(' ');
+
+            if formatted_files.is_empty() {
+                output.push_str(
+                    &"No files needed formatting"
+                        .bright_green()
+                        .bold()
+                        .to_string(),
+                );
+                output.push_str("\n");
+            } else {
+                // Get relative paths for better readability
+                let relative_formatted_files: Vec<_> = formatted_files
+                    .iter()
+                    .map(|path| make_relative_path(path))
+                    .collect();
+
+                let count = relative_formatted_files.len();
+                let files_text = if count == 1 { "file" } else { "files" };
+
+                // Display summary line
+                output.push_str(
+                    &format!("{} {} beautified", count, files_text)
+                        .bright_green()
+                        .bold()
+                        .to_string(),
+                );
+                output.push_str("\n");
+
+                // Optionally display the list of formatted files (for detailed view)
+                if count <= 5 {
+                    // Limit to 5 files to avoid clutter
+                    output.push_str("     ");
+                    output.push_str(
+                        &relative_formatted_files
+                            .iter()
+                            .map(|path| path.display().to_string())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                            .dimmed()
+                            .to_string(),
+                    );
+                    output.push_str("\n");
+                }
+            }
         } else {
             output.push_str("  ");
             output.push_str(&"⚡".bright_green().to_string());

@@ -33,7 +33,7 @@ impl Rustfmt {
         &self,
         file: &Path,
         config: &ModelsToolConfig,
-    ) -> Result<Vec<LintIssue>, ToolError> {
+    ) -> Result<(Vec<LintIssue>, String, String), ToolError> {
         // Always use the current directory as the project root
         // This assumes we're running from the project root
         let project_root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
@@ -68,26 +68,38 @@ impl Rustfmt {
             message: format!("Failed to execute cargo fmt: {}", e),
         })?;
 
+        // Get stdout and stderr
+        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
         // Parse the output
         if output.status.success() {
             // No formatting issues
-            Ok(Vec::new())
+            Ok((Vec::new(), stdout, stderr))
         } else {
             // File needs formatting
-            Ok(vec![LintIssue {
-                severity: IssueSeverity::Style,
-                message: "File needs formatting".to_string(),
-                file: Some(file.to_path_buf()),
-                line: None,
-                column: None,
-                code: None,
-                fix_available: true,
-            }])
+            Ok((
+                vec![LintIssue {
+                    severity: IssueSeverity::Style,
+                    message: "File needs formatting".to_string(),
+                    file: Some(file.to_path_buf()),
+                    line: None,
+                    column: None,
+                    code: None,
+                    fix_available: true,
+                }],
+                stdout,
+                stderr,
+            ))
         }
     }
 
     /// Fix formatting issues with rustfmt
-    fn fix_file(&self, file: &Path, config: &ModelsToolConfig) -> Result<(), ToolError> {
+    fn fix_file(
+        &self,
+        file: &Path,
+        config: &ModelsToolConfig,
+    ) -> Result<(String, String), ToolError> {
         // Always use the current directory as the project root
         // This assumes we're running from the project root
         let project_root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
@@ -122,16 +134,20 @@ impl Rustfmt {
             message: format!("Failed to execute cargo fmt: {}", e),
         })?;
 
+        // Get stdout and stderr
+        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
         // Check result
         if !output.status.success() {
             return Err(ToolError::ToolFailed {
                 name: self.name().to_string(),
                 code: output.status.code().unwrap_or(1),
-                message: String::from_utf8_lossy(&output.stderr).to_string(),
+                message: stderr.clone(),
             });
         }
 
-        Ok(())
+        Ok((stdout, stderr))
     }
 }
 
@@ -181,6 +197,8 @@ impl LintTool for Rustfmt {
         let start_time = Instant::now();
         let mut all_issues = Vec::new();
         let mut success = true;
+        let mut all_stdout = String::new();
+        let mut all_stderr = String::new();
 
         // Process each file
         for file in files {
@@ -192,11 +210,13 @@ impl LintTool for Rustfmt {
             if config.check {
                 // Check mode - just check if files need formatting
                 match self.check_file(file, config) {
-                    Ok(issues) => {
+                    Ok((issues, stdout, stderr)) => {
                         if !issues.is_empty() {
                             success = false;
                             all_issues.extend(issues);
                         }
+                        all_stdout.push_str(&stdout);
+                        all_stderr.push_str(&stderr);
                     }
                     Err(e) => {
                         return Err(e);
@@ -205,8 +225,10 @@ impl LintTool for Rustfmt {
             } else {
                 // Format mode - actually format the files
                 match self.fix_file(file, config) {
-                    Ok(()) => {
+                    Ok((stdout, stderr)) => {
                         // Successfully formatted
+                        all_stdout.push_str(&stdout);
+                        all_stderr.push_str(&stderr);
                     }
                     Err(e) => {
                         success = false;
@@ -240,8 +262,16 @@ impl LintTool for Rustfmt {
             success,
             issues: all_issues,
             execution_time,
-            stdout: None,
-            stderr: None,
+            stdout: if all_stdout.is_empty() {
+                None
+            } else {
+                Some(all_stdout)
+            },
+            stderr: if all_stderr.is_empty() {
+                None
+            } else {
+                Some(all_stderr)
+            },
         })
     }
 
