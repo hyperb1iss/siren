@@ -45,7 +45,7 @@ mod mock_utils {
 
     impl LintTool for MockPythonTool {
         fn can_handle(&self, file: &Path) -> bool {
-            file.extension().map_or(false, |ext| ext == "py")
+            file.extension().is_some_and(|ext| ext == "py")
         }
     }
 }

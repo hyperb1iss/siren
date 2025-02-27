@@ -341,8 +341,7 @@ impl OutputFormatter for PrettyFormatter {
         let only_formatters = results.iter().all(|result| {
             result
                 .tool
-                .as_ref()
-                .map_or(false, |t| t.tool_type == ToolType::Formatter)
+                .as_ref().is_some_and(|t| t.tool_type == ToolType::Formatter)
         });
 
         // Count of files processed by formatters
@@ -353,8 +352,7 @@ impl OutputFormatter for PrettyFormatter {
             // Track formatted files if this is a formatter
             if result
                 .tool
-                .as_ref()
-                .map_or(false, |t| t.tool_type == ToolType::Formatter)
+                .as_ref().is_some_and(|t| t.tool_type == ToolType::Formatter)
             {
                 // Check for our special "File formatted" info issues
                 let formatted_file_issues = result

@@ -224,7 +224,7 @@ pub fn collect_files_with_gitignore(dir: &Path) -> Result<Vec<PathBuf>, crate::e
             eprintln!("DEBUG: Found file in target directory: {:?}", path);
         }
 
-        if entry.file_type().map_or(false, |ft| ft.is_file()) {
+        if entry.file_type().is_some_and(|ft| ft.is_file()) {
             files.push(path.to_path_buf());
         }
     }

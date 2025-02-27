@@ -172,7 +172,7 @@ impl ProjectDetector for DefaultProjectDetector {
                     .build();
 
                 for entry in walker.filter_map(Result::ok) {
-                    if entry.file_type().map_or(false, |ft| ft.is_file()) {
+                    if entry.file_type().is_some_and(|ft| ft.is_file()) {
                         file_count += 1;
                         collected_files.push(entry.path().to_path_buf());
 
@@ -308,7 +308,7 @@ impl ProjectDetector for DefaultProjectDetector {
         // If we also have glob patterns or no specific files were found, scan the directory
         if has_glob_patterns || specific_files.is_empty() {
             for entry in walker.filter_map(Result::ok) {
-                if entry.file_type().map_or(false, |ft| ft.is_file()) {
+                if entry.file_type().is_some_and(|ft| ft.is_file()) {
                     // Skip if we're looking at specific files and this isn't one of them
                     if !specific_files.is_empty()
                         && !specific_files.contains(&entry.path().to_path_buf())

@@ -223,8 +223,8 @@ async fn verify_issue_detection(
 
     // Check if any tool produced output, even if it didn't report issues
     let has_output = results.iter().any(|r| {
-        r.stdout.as_ref().map_or(false, |s| !s.is_empty())
-            || r.stderr.as_ref().map_or(false, |s| !s.is_empty())
+        r.stdout.as_ref().is_some_and(|s| !s.is_empty())
+            || r.stderr.as_ref().is_some_and(|s| !s.is_empty())
             || !r.issues.is_empty()
     });
 
