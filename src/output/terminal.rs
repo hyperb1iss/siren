@@ -6,25 +6,15 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
-/// Terminal UI utilities for Siren
-pub struct EnchantedColors;
+/// Helper functions for styling
+/// Get a style for error messages
+pub fn error_style() -> Style {
+    Style::new().red().bold()
+}
 
-impl EnchantedColors {
-    pub fn primary() -> Style {
-        Style::new().magenta().bold()
-    }
-
-    pub fn error() -> Style {
-        Style::new().red().bold()
-    }
-
-    pub fn subtle() -> Style {
-        Style::new().dim()
-    }
-
-    pub fn highlight() -> Style {
-        Style::new().magenta().italic()
-    }
+/// Get a style for highlighted text
+pub fn highlight_style() -> Style {
+    Style::new().magenta().italic()
 }
 
 /// Styled section header
@@ -35,19 +25,20 @@ pub fn section_header(title: &str) -> String {
 
     format!(
         "\n{}\n",
-        EnchantedColors::primary().apply_to(format!("{}{}{}", prefix, title, suffix))
+        format!("{}{}{}", prefix, title, suffix)
+            .bright_cyan()
+            .on_black()
+            .bold()
     )
 }
 
 /// Styled divider line
 pub fn divider() -> String {
-    // Create a more interesting divider with a mix of characters for a cyberpunk feel
-    let divider_pattern = "═━═━═━═━═━═━═━═━═━═━═━═━═━═━═━═━═━═━═━═━═━═━═━═━═━═━═━";
+    // Create a more subtle divider that complements the neon aesthetic
+    let divider_pattern = "┈".repeat(50);
 
-    // Apply subtle styling without box ends for a cleaner look
-    EnchantedColors::subtle()
-        .apply_to(divider_pattern)
-        .to_string()
+    // Apply neon styling for a more vibrant but subtle look
+    format!("  {}", divider_pattern.bright_cyan().dimmed())
 }
 
 /// Tool emoji based on the tool type
@@ -93,7 +84,7 @@ pub fn language_emoji(language: &crate::models::Language) -> &'static str {
 pub fn error_panel(title: &str, message: &str, details: Option<&str>) {
     let panel_width = 80;
     let separator = "═".repeat(panel_width);
-    let error_style = EnchantedColors::error();
+    let error_style = error_style();
 
     println!("\n{}", error_style.apply_to(format!("╔{}╗", separator)));
 
@@ -203,17 +194,23 @@ impl NeonDisplay {
     pub fn new() -> Self {
         // Don't clear the terminal, users want to see previous output
 
-        // Clean, elegant header
+        // Clean, elegant header with enhanced neon styling
         let now = chrono::Local::now();
         println!(
-            "{} {} {}",
-            "siren".bright_magenta(),
-            now.format("%H:%M:%S").to_string().bright_blue(),
-            "scan initialized".bright_cyan()
+            "  {} {} {}",
+            "siren".bright_magenta().bold(),
+            now.format("%H:%M:%S").to_string().bright_blue().bold(),
+            "scan initialized".bright_cyan().bold()
         );
+
+        // Add a subtle separator after the header
+        println!("  {}", "┈".repeat(20).bright_cyan().dimmed());
+
         println!(
-            "{}",
-            "Analyzing codebase for quality issues...".bright_white()
+            "  {}",
+            "Analyzing codebase for quality issues..."
+                .bright_white()
+                .bold()
         );
 
         // Add a blank line before spinners start
@@ -229,6 +226,7 @@ impl NeonDisplay {
 
         // Start the render thread
         let render_thread = thread::spawn(move || {
+            // Enhanced spinner frames for a more cyberpunk feel
             let frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
             let mut frame_index = 0;
 
@@ -254,29 +252,39 @@ impl NeonDisplay {
                 // Count how many lines we'll render this time
                 let mut render_count = 0;
 
-                // Render all spinners
+                // Render all spinners with enhanced styling
                 for (message, status) in &states {
                     match status {
                         SpinnerStatus::Active => {
-                            // Active spinner with animation
-                            println!("{} {}", frames[frame_index].bright_cyan(), message);
+                            // Active spinner with animation and enhanced styling
+                            println!("  {} {}", frames[frame_index].bright_cyan().bold(), message);
                         }
                         SpinnerStatus::Success(details) => {
-                            // Success with checkmark
+                            // Success with checkmark and enhanced styling
                             println!(
-                                "{} {} {}",
-                                "✓".bright_green(),
+                                "  {} {} {}",
+                                "✓".bright_green().bold(),
                                 message,
-                                details.bright_green()
+                                details.bright_green().bold()
                             );
                         }
                         SpinnerStatus::Warning(details) => {
-                            // Warning with warning symbol
-                            println!("{} {} {}", "⚠".yellow(), message, details.yellow());
+                            // Warning with warning symbol and enhanced styling
+                            println!(
+                                "  {} {} {}",
+                                "⚠".yellow().bold(),
+                                message,
+                                details.yellow().bold()
+                            );
                         }
                         SpinnerStatus::Error(details) => {
-                            // Error with x mark
-                            println!("{} {} {}", "✗".bright_red(), message, details.bright_red());
+                            // Error with x mark and enhanced styling
+                            println!(
+                                "  {} {} {}",
+                                "✗".bright_red().bold(),
+                                message,
+                                details.bright_red().bold()
+                            );
                         }
                     }
                     render_count += 1;
@@ -308,27 +316,37 @@ impl NeonDisplay {
             for (message, status) in states {
                 match status {
                     SpinnerStatus::Active => {
-                        // Show completed for any remaining active spinners
+                        // Show completed for any remaining active spinners with enhanced styling
                         println!(
-                            "{} {} {}",
-                            "✓".bright_green(),
+                            "  {} {} {}",
+                            "✓".bright_green().bold(),
                             message,
-                            "completed".bright_green()
+                            "completed".bright_green().bold()
                         );
                     }
                     SpinnerStatus::Success(details) => {
                         println!(
-                            "{} {} {}",
-                            "✓".bright_green(),
+                            "  {} {} {}",
+                            "✓".bright_green().bold(),
                             message,
-                            details.bright_green()
+                            details.bright_green().bold()
                         );
                     }
                     SpinnerStatus::Warning(details) => {
-                        println!("{} {} {}", "⚠".yellow(), message, details.yellow());
+                        println!(
+                            "  {} {} {}",
+                            "⚠".yellow().bold(),
+                            message,
+                            details.yellow().bold()
+                        );
                     }
                     SpinnerStatus::Error(details) => {
-                        println!("{} {} {}", "✗".bright_red(), message, details.bright_red());
+                        println!(
+                            "  {} {} {}",
+                            "✗".bright_red().bold(),
+                            message,
+                            details.bright_red().bold()
+                        );
                     }
                 }
             }
@@ -344,11 +362,11 @@ impl NeonDisplay {
 
     /// Add a tool status to the display
     pub fn add_tool_status(&mut self, tool_name: &str, language: &str, tool_type: &str) -> usize {
-        // Create a cleaner status message with less redundancy
+        // Create a cleaner status message with enhanced neon styling
         let status_message = format!(
             "{} {}",
-            tool_name.bright_magenta(),
-            format!("({} {})", language, tool_type).bright_blue()
+            tool_name.bright_magenta().bold(),
+            format!("({} {})", language, tool_type).bright_blue().bold()
         );
 
         // Add to spinner states
@@ -366,11 +384,11 @@ impl NeonDisplay {
         if index < states.len() {
             // Parse the message to determine the status
             let (message_text, status) = if message.contains("no changes needed") {
-                // No changes needed - show as info/success
+                // No changes needed - show as info/success with enhanced styling
                 let details = "「no changes needed」".to_string();
                 (states[index].0.clone(), SpinnerStatus::Success(details))
             } else if message.contains("files formatted") || message.contains("beautified") {
-                // Files were formatted - show as success with count
+                // Files were formatted - show as success with count and enhanced styling
                 let details = if let Some(count) = message
                     .split_whitespace()
                     .find(|s| s.parse::<usize>().is_ok())
@@ -381,7 +399,7 @@ impl NeonDisplay {
                 };
                 (states[index].0.clone(), SpinnerStatus::Success(details))
             } else if message.contains("issues found") || message.contains("warnings") {
-                // Issues found - show as warning
+                // Issues found - show as warning with enhanced styling
                 let details = if let Some(count) = message
                     .split_whitespace()
                     .find(|s| s.parse::<usize>().is_ok())
@@ -392,11 +410,11 @@ impl NeonDisplay {
                 };
                 (states[index].0.clone(), SpinnerStatus::Warning(details))
             } else if message.contains("failed") || message.contains("error") {
-                // Error occurred - show as error
+                // Error occurred - show as error with enhanced styling
                 let details = "「execution failed」".to_string();
                 (states[index].0.clone(), SpinnerStatus::Error(details))
             } else {
-                // Default to success
+                // Default to success with enhanced styling
                 let details = "「completed」".to_string();
                 (states[index].0.clone(), SpinnerStatus::Success(details))
             };
@@ -424,13 +442,17 @@ impl NeonDisplay {
             let _ = handle.join();
         }
 
-        // Display elegant footer
+        // Display elegant footer with enhanced neon styling
         let now = chrono::Local::now();
+
+        // Add a subtle separator before the footer
+        println!("\n  {}", "┈".repeat(20).bright_cyan().dimmed());
+
         println!(
-            "\n{} {} {}",
-            "siren".bright_magenta(),
-            now.format("%H:%M:%S").to_string().bright_blue(),
-            "scan complete".bright_cyan()
+            "  {} {} {}",
+            "siren".bright_magenta().bold(),
+            now.format("%H:%M:%S").to_string().bright_blue().bold(),
+            "scan complete".bright_cyan().bold()
         );
 
         // We'll skip printing the issue count here since it will be in the summary

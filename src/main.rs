@@ -454,15 +454,12 @@ async fn main() -> Result<(), SirenError> {
 
 /// Print a stylish welcome message
 fn print_stylish_welcome() {
-    use output::terminal::{divider, EnchantedColors};
+    use output::terminal::{divider, highlight_style};
 
     // Don't clear the screen
 
     println!("{}", output::terminal::section_header("💫 Siren 💫"));
-    println!(
-        "{}",
-        EnchantedColors::highlight().apply_to("Ready to scan your code")
-    );
+    println!("{}", highlight_style().apply_to("Ready to scan your code"));
     println!("{}", divider());
 }
 
