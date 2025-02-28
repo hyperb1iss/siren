@@ -39,7 +39,11 @@
   - ✅ Detection logic implemented
   - ✅ Test fixtures created
   - ❌ Actual tool implementations pending
-- ❌ HTML/CSS tool implementations
+- 🔄 HTML/Templates tool implementations
+  - ✅ Detection logic implemented
+  - 🔄 djlint implementation in progress
+  - 🔄 prettier implementation in progress
+  - ❌ htmlhint implementation pending
 - ❌ Go tool implementations
 - ❌ Ruby tool implementations
 
@@ -116,26 +120,50 @@
 
 ## Next Steps
 
-Based on the current state of the project, here are the recommended next steps:
+Based on the current state of the project, here are the recommended next steps in priority order:
 
-1. **Implement JavaScript/TypeScript Tools**: The detection logic and test fixtures are in place, but the actual tool implementations need to be created:
+1. **Complete HTML/Template Tools Implementation**:
+
+   - Finish djlint implementation for HTML/template formatting
+   - Integrate prettier for consistent HTML/CSS formatting
+   - Add htmlhint for additional linting capabilities
+   - Create comprehensive test suite for template tools
+
+2. **Implement JavaScript/TypeScript Tools**:
 
    - Create prettier implementation for formatting
    - Create eslint implementation for linting
    - Create typescript implementation for type checking
 
-2. **Complete Integration Testing**: Continue expanding the integration tests:
+3. **Enhance Configuration Management**:
 
-   - Add more comprehensive test cases for existing tools
-   - Implement tests for JavaScript/TypeScript tools once implemented
-   - Add tests for edge cases and error handling
+   - Implement configuration merging for user customization
+   - Create smart default configurations
+   - Add configuration validation
+   - Document configuration options
 
-3. **Enhance Configuration Management**: Implement configuration merging to support user customization.
+4. **Documentation Push**:
 
-4. **Add Support for More Languages**: Consider implementing support for:
+   - Create comprehensive API documentation
+   - Write user guide with examples
+   - Develop contributing guidelines
+   - Add tool-specific configuration guides
 
-   - HTML/CSS tools
-   - Go tools
-   - Ruby tools
+5. **Testing Expansion**:
 
-5. **Document API**: Start documenting the public API for better developer experience.
+   - Add test cases for HTML/Template tools
+   - Implement JS/TS tool tests
+   - Add edge case handling
+   - Improve error reporting in tests
+
+6. **Future Language Support**:
+
+   - Go tools (gofmt, golangci-lint)
+   - Ruby tools (rubocop, sorbet)
+   - Additional language support based on community feedback
+
+7. **Performance Optimizations**:
+   - Implement caching system
+   - Optimize parallel execution
+   - Add incremental checking capabilities
+   - Improve startup time
