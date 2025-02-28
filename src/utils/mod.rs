@@ -203,30 +203,41 @@ pub fn collect_files_with_gitignore(dir: &Path) -> Result<Vec<PathBuf>, crate::e
     let mut files = Vec::new();
 
     // Debug: Print the directory we're scanning
-    eprintln!("DEBUG: Scanning directory: {:?}", dir);
+    debug!("Starting directory search from: {:?}", dir);
 
     // Check if .gitignore exists in the directory
     let gitignore_path = dir.join(".gitignore");
-    if gitignore_path.exists() {
-        eprintln!("DEBUG: Found .gitignore at {:?}", gitignore_path);
-
-        // Print the contents of .gitignore for debugging
-        if let Ok(contents) = std::fs::read_to_string(&gitignore_path) {
-            eprintln!("DEBUG: .gitignore contents:\n{}", contents);
-        }
-    } else {
-        eprintln!("DEBUG: No .gitignore found at {:?}", gitignore_path);
+    if gitignore_path.exists() && log_enabled!(Level::Debug) {
+        debug!("Found .gitignore at {:?}", gitignore_path);
     }
 
     // Use ignore to respect gitignore rules
-    let walker = ignore::WalkBuilder::new(dir)
+    let mut walker_builder = ignore::WalkBuilder::new(dir);
+    walker_builder
         .hidden(false) // Don't ignore hidden files by default
         .git_ignore(true) // Respect .gitignore
         .git_global(true) // Respect global gitignore
         .git_exclude(true) // Respect .git/info/exclude
-        .build();
+        .filter_entry(|entry| {
+            let path = entry.path();
 
-    // Debug: Count total files before filtering
+            // Skip .git directories and any path containing .git segment
+            if path.to_string_lossy().contains("/.git/")
+                || path.to_string_lossy().contains("\\.git\\")
+                || path.file_name().is_some_and(|name| name == ".git")
+            {
+                if log_enabled!(Level::Trace) {
+                    debug!("Skipping git-related path: {:?}", path);
+                }
+                return false;
+            }
+
+            true
+        });
+
+    let walker = walker_builder.build();
+
+    // Debug counters
     let mut total_files = 0;
     let mut ignored_files = 0;
 
@@ -234,7 +245,7 @@ pub fn collect_files_with_gitignore(dir: &Path) -> Result<Vec<PathBuf>, crate::e
         let path = entry.path();
         total_files += 1;
 
-        // Skip the .git directory and its contents
+        // Skip any path that contains .git anywhere in its components
         if path.components().any(|c| {
             if let std::path::Component::Normal(name) = c {
                 name.to_string_lossy() == ".git"
@@ -246,20 +257,16 @@ pub fn collect_files_with_gitignore(dir: &Path) -> Result<Vec<PathBuf>, crate::e
             continue;
         }
 
-        // Debug: Check if this file is in target directory
-        if path.starts_with(dir.join("target")) {
-            eprintln!("DEBUG: Found file in target directory: {:?}", path);
-        }
-
         if entry.file_type().is_some_and(|ft| ft.is_file()) {
             files.push(path.to_path_buf());
         }
     }
 
-    // Debug: Print summary
-    eprintln!("DEBUG: Total files scanned: {}", total_files);
-    eprintln!("DEBUG: Files ignored: {}", ignored_files);
-    eprintln!("DEBUG: Files collected: {}", files.len());
+    if log_enabled!(Level::Debug) {
+        debug!("Total files scanned: {}", total_files);
+        debug!("Files ignored: {}", ignored_files);
+        debug!("Files collected: {}", files.len());
+    }
 
     Ok(files)
 }

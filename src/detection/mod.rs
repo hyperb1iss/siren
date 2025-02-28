@@ -30,10 +30,7 @@ pub trait ProjectDetector {
 
 /// Default implementation of ProjectDetector
 #[derive(Clone)]
-pub struct DefaultProjectDetector {
-    /// Maximum depth to scan
-    max_depth: usize,
-}
+pub struct DefaultProjectDetector {}
 
 impl Default for DefaultProjectDetector {
     fn default() -> Self {
@@ -44,7 +41,7 @@ impl Default for DefaultProjectDetector {
 impl DefaultProjectDetector {
     /// Create a new DefaultProjectDetector
     pub fn new() -> Self {
-        Self { max_depth: 5 }
+        Self {}
     }
 
     /// Detect language based on file extension
@@ -162,26 +159,18 @@ impl ProjectDetector for DefaultProjectDetector {
                     }
                 }
             } else if path.is_dir() {
-                // For directories, walk the directory tree using ignore::WalkBuilder to respect .gitignore
-                let walker = ignore::WalkBuilder::new(path)
-                    .hidden(false) // Don't ignore hidden files by default
-                    .git_ignore(true) // Respect .gitignore
-                    .git_global(true) // Respect global gitignore
-                    .git_exclude(true) // Respect .git/info/exclude
-                    .max_depth(Some(self.max_depth))
-                    .build();
+                // For directories, use the existing collect_files_with_gitignore function
+                let dir_files = crate::utils::collect_files_with_gitignore(path)?;
 
-                for entry in walker.filter_map(Result::ok) {
-                    if entry.file_type().is_some_and(|ft| ft.is_file()) {
-                        file_count += 1;
-                        collected_files.push(entry.path().to_path_buf());
+                for file_path in &dir_files {
+                    file_count += 1;
+                    collected_files.push(file_path.clone());
 
-                        if let Some(ext) = entry.path().extension() {
-                            if let Some(lang) =
-                                self.detect_language_from_extension(ext.to_string_lossy().as_ref())
-                            {
-                                *languages.entry(lang).or_insert(0) += 1;
-                            }
+                    if let Some(ext) = file_path.extension() {
+                        if let Some(lang) =
+                            self.detect_language_from_extension(ext.to_string_lossy().as_ref())
+                        {
+                            *languages.entry(lang).or_insert(0) += 1;
                         }
                     }
                 }
@@ -259,15 +248,6 @@ impl ProjectDetector for DefaultProjectDetector {
         let mut file_count = 0;
         let mut collected_files = Vec::new();
 
-        // Walk directory tree using ignore::WalkBuilder to respect .gitignore
-        let walker = ignore::WalkBuilder::new(&base_dir)
-            .hidden(false) // Don't ignore hidden files by default
-            .git_ignore(true) // Respect .gitignore
-            .git_global(true) // Respect global gitignore
-            .git_exclude(true) // Respect .git/info/exclude
-            .max_depth(Some(self.max_depth))
-            .build();
-
         // First check if any of the paths are specific files
         let mut specific_files = Vec::new();
         let mut has_glob_patterns = false;
@@ -307,24 +287,23 @@ impl ProjectDetector for DefaultProjectDetector {
 
         // If we also have glob patterns or no specific files were found, scan the directory
         if has_glob_patterns || specific_files.is_empty() {
-            for entry in walker.filter_map(Result::ok) {
-                if entry.file_type().is_some_and(|ft| ft.is_file()) {
-                    // Skip if we're looking at specific files and this isn't one of them
-                    if !specific_files.is_empty()
-                        && !specific_files.contains(&entry.path().to_path_buf())
+            // Use the existing collect_files_with_gitignore function
+            let dir_files = crate::utils::collect_files_with_gitignore(&base_dir)?;
+
+            for file_path in dir_files {
+                // Skip if we're looking at specific files and this isn't one of them
+                if !specific_files.is_empty() && !specific_files.contains(&file_path) {
+                    continue;
+                }
+
+                file_count += 1;
+                collected_files.push(file_path.clone());
+
+                if let Some(ext) = file_path.extension() {
+                    if let Some(lang) =
+                        self.detect_language_from_extension(ext.to_string_lossy().as_ref())
                     {
-                        continue;
-                    }
-
-                    file_count += 1;
-                    collected_files.push(entry.path().to_path_buf());
-
-                    if let Some(ext) = entry.path().extension() {
-                        if let Some(lang) =
-                            self.detect_language_from_extension(ext.to_string_lossy().as_ref())
-                        {
-                            *languages.entry(lang).or_insert(0) += 1;
-                        }
+                        *languages.entry(lang).or_insert(0) += 1;
                     }
                 }
             }
