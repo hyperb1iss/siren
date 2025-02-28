@@ -11,12 +11,12 @@ pub mod html;
 mod python;
 mod rust;
 
-/// Trait for lint/format tools
+/// Trait for tools that can check code
 pub trait LintTool: Send + Sync {
-    /// Get the tool name
+    /// Get the name of the tool
     fn name(&self) -> &str;
 
-    /// Check if this tool can handle the given file path
+    /// Check if this tool can handle the given file
     fn can_handle(&self, file_path: &Path) -> bool;
 
     /// Execute the tool on the given files
@@ -30,19 +30,19 @@ pub trait LintTool: Send + Sync {
     /// See src/tools/python/pylint.rs or src/tools/rust/clippy.rs for reference implementations
     fn execute(&self, files: &[PathBuf], config: &ToolConfig) -> Result<LintResult, ToolError>;
 
-    /// Get the tool type (formatter, linter, etc.)
+    /// Get the type of tool
     fn tool_type(&self) -> ToolType;
 
-    /// Get the language this tool is for
+    /// Get the language this tool works with
     fn language(&self) -> Language;
 
-    /// Get the description of this tool
+    /// Get a description of what this tool does
     fn description(&self) -> &str;
 
-    /// Check if the tool is installed and available
+    /// Check if the tool is available on the system
     fn is_available(&self) -> bool;
 
-    /// Get the version of the tool, if available
+    /// Get the version of the tool
     fn version(&self) -> Option<String>;
 }
 

@@ -179,7 +179,6 @@ impl DjLintFormatter {
         // Only treat as error if exit status indicates failure and there's a real error message
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-            let stdout = String::from_utf8_lossy(&output.stdout).to_string();
 
             // Filter out progress messages
             let real_error = stderr

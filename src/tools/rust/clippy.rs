@@ -239,12 +239,8 @@ impl Clippy {
         // Set current directory to project_dir
         command.current_dir(project_dir);
 
-        // Show the full command being executed
-        let cmd_str = format!(
-            "cargo clippy -- -W clippy::all in {}",
-            project_dir.display()
-        );
-        debug!("Executing: {}", cmd_str);
+        // Log the command
+        utils::log_command(&command);
 
         // Run the command
         let output = command.output().map_err(|e| ToolError::ExecutionFailed {
@@ -427,14 +423,30 @@ impl LintTool for Clippy {
 
     fn is_available(&self) -> bool {
         // Check for both cargo and clippy
-        utils::command_exists("cargo") && 
-        // Try running cargo clippy -V to see if clippy is installed
-        Command::new("cargo").args(["clippy", "-V"]).output().map(|o| o.status.success()).unwrap_or(false)
+        utils::command_exists("cargo") && {
+            // Try running cargo clippy -V to see if clippy is installed
+            let mut command = Command::new("cargo");
+            command.args(["clippy", "-V"]);
+
+            // Log the command
+            utils::log_command(&command);
+
+            command
+                .output()
+                .map(|o| o.status.success())
+                .unwrap_or(false)
+        }
     }
 
     fn version(&self) -> Option<String> {
         // Run cargo clippy -V
-        let output = Command::new("cargo").args(["clippy", "-V"]).output().ok()?;
+        let mut command = Command::new("cargo");
+        command.args(["clippy", "-V"]);
+
+        // Log the command
+        utils::log_command(&command);
+
+        let output = command.output().ok()?;
 
         if output.status.success() {
             // Parse the version from output
@@ -575,14 +587,39 @@ impl LintTool for ClippyFixer {
     }
 
     fn is_available(&self) -> bool {
-        // Use the same availability check as Clippy
-        let clippy = Clippy::new();
-        clippy.is_available()
+        // Check for both cargo and clippy
+        utils::command_exists("cargo") && {
+            // Try running cargo clippy -V to see if clippy is installed
+            let mut command = Command::new("cargo");
+            command.args(["clippy", "-V"]);
+
+            // Log the command
+            utils::log_command(&command);
+
+            command
+                .output()
+                .map(|o| o.status.success())
+                .unwrap_or(false)
+        }
     }
 
     fn version(&self) -> Option<String> {
-        // Use the same version check as Clippy
-        let clippy = Clippy::new();
-        clippy.version()
+        // Run cargo clippy -V
+        let mut command = Command::new("cargo");
+        command.args(["clippy", "-V"]);
+
+        // Log the command
+        utils::log_command(&command);
+
+        let output = command.output().ok()?;
+
+        if output.status.success() {
+            // Parse the version from output
+            let version = String::from_utf8_lossy(&output.stdout).to_string();
+            let version = version.trim();
+            Some(version.to_string())
+        } else {
+            None
+        }
     }
 }

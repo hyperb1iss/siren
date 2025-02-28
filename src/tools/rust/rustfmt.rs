@@ -62,6 +62,9 @@ impl Rustfmt {
 
         command.arg(&abs_file_path);
 
+        // Log the command
+        utils::log_command(&command);
+
         // Run the command
         let output = command.output().map_err(|e| ToolError::ExecutionFailed {
             name: self.name().to_string(),
@@ -127,6 +130,9 @@ impl Rustfmt {
         };
 
         command.arg(&abs_file_path);
+
+        // Log the command
+        utils::log_command(&command);
 
         // Run the command
         let output = command.output().map_err(|e| ToolError::ExecutionFailed {

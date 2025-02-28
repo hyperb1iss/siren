@@ -1,6 +1,7 @@
 //! Utility functions for Siren
 
 use globset::{Glob, GlobSetBuilder};
+use log::{debug, log_enabled, Level};
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -8,13 +9,39 @@ use std::process::Command;
 // Export file selection utilities
 pub mod file_selection;
 
+/// Log a command that is about to be executed
+pub fn log_command(command: &Command) {
+    // Only log if debug level is enabled (which corresponds to verbose mode)
+    if log_enabled!(Level::Debug) {
+        // Get the program name
+        let program = command.get_program().to_string_lossy();
+
+        // Get all arguments
+        let args: Vec<String> = command
+            .get_args()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect();
+
+        // Get working directory if set
+        let working_dir = command
+            .get_current_dir()
+            .map(|p| format!(" (in {})", p.display()))
+            .unwrap_or_default();
+
+        // Format the full command
+        let full_command = format!("{} {}{}", program, args.join(" "), working_dir);
+
+        debug!("🔮 Executing: {}", full_command);
+    }
+}
+
 /// Check if a command exists in PATH
 pub fn command_exists<S: AsRef<OsStr>>(command: S) -> bool {
     let cmd = command.as_ref();
-    log::debug!("Checking if command exists: {:?}", cmd);
+    debug!("Checking if command exists: {:?}", cmd);
     let command_str = cmd.to_str().unwrap_or("[non-utf8]");
     let result = which::which(command_str).is_ok();
-    log::debug!("Command {:?} exists: {}", cmd, result);
+    debug!("Command {:?} exists: {}", cmd, result);
     result
 }
 
