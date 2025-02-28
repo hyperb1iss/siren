@@ -1,0 +1,43 @@
+Description: Cyberpunk-inspired NeonDisplay and terminal output styling guidelines for Siren's enchanting UI
+Globs: src/output/terminal.rs,src/output/mod.rs
+
+NeonDisplay Aesthetic Guidelines:
+
+1. Core Visual Style 🌈
+   - Use vibrant neon colors for emphasis
+   - Employ cyberpunk-inspired spinners
+   - Create depth with bold/dim contrast
+   - Maintain readability over flash
+
+2. Status Indicators 🔄
+   - Active: Pulsing cyan spinner
+   - Success: Neon green with checkmark
+   - Warning: Electric yellow with alert
+   - Error: Hot pink/red with x
+   - Include tool emoji based on type
+
+3. Progress Display Structure
+   - Tool Name 「Status Message」format
+   - Language + Type indicators
+   - Real-time updates with spinners
+   - Clean finish transitions
+
+4. Color Palette
+   - Primary: Cyan (#00FFFF)
+   - Success: Neon Green (#39FF14)
+   - Warning: Electric Yellow (#FFE744)
+   - Error: Hot Pink (#FF69B4)
+   - Info: Cool Blue (#00BFFF)
+
+5. Typography & Layout
+   - Use Unicode box-drawing chars
+   - Apply consistent spacing
+   - Right-align status messages
+   - Support wide terminal chars
+
+Implementation Notes:
+- See @terminal.rs:SpinnerStatus enum
+- Reference @mod.rs:PrettyFormatter
+- Use terminal::error_style() for errors
+- Follow terminal::section_header() format
+- Maintain terminal::divider() consistency 

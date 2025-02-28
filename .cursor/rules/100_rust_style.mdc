@@ -1,0 +1,36 @@
+---
+description: Rust code style and best practices for the Siren project
+globs: src/**/*.rs
+alwaysApply: false
+---
+ Rust Code Style Guidelines:
+
+1. Code Organization:
+   - Group imports by std, external, crate
+   - Keep functions focused and small
+   - Use type aliases for complex types
+   - Prefer composition over inheritance
+
+2. Naming Conventions:
+   - Use snake_case for functions/variables
+   - Use PascalCase for types/traits
+   - Use SCREAMING_SNAKE for constants
+   - Prefix unsafe functions with unsafe_
+
+3. Error Handling:
+   - Use custom error types with thiserror
+   - Provide helpful error messages
+   - Avoid unwrap/expect in production
+   - Use anyhow for application code
+
+4. Documentation:
+   - Document all public items
+   - Include examples in doc tests
+   - Link to related items
+   - Explain panics and safety
+
+5. Testing:
+   - Write unit tests for all modules
+   - Use test fixtures appropriately
+   - Mock external dependencies
+   - Test error conditions

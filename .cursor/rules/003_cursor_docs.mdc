@@ -1,0 +1,39 @@
+---
+description: These files contain reference documentation and guides to aid in development efforts for the Siren project
+globs: docs/**/*
+alwaysApply: false
+---
+ Documentation Categories:
+
+1. Architecture (arch/*)
+   - System design documents
+   - Component interactions
+   - Data flow diagrams
+
+2. API Reference (api/*)
+   - Public API documentation
+   - Tool interfaces
+   - Configuration schemas
+
+3. User Guides (guides/*)
+   - Installation instructions
+   - Usage examples
+   - Configuration guides
+   - Best practices
+
+4. Development (dev/*)
+   - Contributing guidelines
+   - Development setup
+   - Testing procedures
+   - Release process
+
+5. Tool Documentation (tools/*)
+   - Individual tool documentation
+   - Language-specific guides
+   - Integration guides
+
+Cross-referencing:
+- Use @file to reference specific files
+- Use #section for doc sections
+- Use [link text](mdc:path) for links
+- Keep paths relative to docs root

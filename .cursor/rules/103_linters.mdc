@@ -1,0 +1,32 @@
+---
+description: Defines the behavior and configuration of linting tools integrated into Siren
+globs: src/tools/**/*.rs,src/tools/**/*.py
+alwaysApply: false
+---
+ Linter Architecture & Integration:
+
+1. Core Traits & Interfaces:
+   @src/tools/mod.rs - LintTool trait defines standard interface
+   - name(), can_handle(), execute()
+   - tool_type(), language(), description()
+   - is_available(), version()
+
+2. Python Linters:
+   @src/tools/python/*.rs
+   - Black: Code formatter (*.py, *.pyi, *.pyx)
+   - Ruff: Fast linter & formatter with auto-fix
+   - PyLint: Static code analyzer
+   - MyPy: Type checker
+
+3. Rust Linters:
+   @src/tools/rust/*.rs
+   - Clippy: Primary Rust linter
+   - RustFmt: Code formatter
+   - Cargo Fix: Auto-fixes for common issues
+
+4. Tool Detection:
+   @src/detection/tool_detection.rs
+   - Auto-detects config files (.pylintrc, .clippy.toml)
+   - Integrates with pyproject.toml for Python tools
+
+Best Practice: Linters should capture both stdout/stderr and structured issues in LintResult. Auto-fix capabilities should be clearly indicated via fix_available flag.
