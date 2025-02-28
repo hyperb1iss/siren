@@ -130,12 +130,12 @@ impl OutputFormatter for PrettyFormatter {
                 .as_ref()
                 .map(|t| &t.tool_type)
                 .unwrap_or(&ToolType::Linter);
-            
+
             // Skip linters with no issues (don't even show their section)
             if *tool_type == ToolType::Linter && result.issues.is_empty() {
                 continue;
             }
-            
+
             let version = result
                 .tool
                 .as_ref()
@@ -375,7 +375,7 @@ impl OutputFormatter for PrettyFormatter {
         let mut info_count = 0;
         let mut files_affected = std::collections::HashSet::new();
         let mut tool_counts = std::collections::HashMap::new();
-        
+
         // Track tools that were run but had no issues (for linters)
         let mut tools_with_no_issues = 0;
         let mut linters_run = 0;
@@ -404,7 +404,7 @@ impl OutputFormatter for PrettyFormatter {
                     tools_with_no_issues += 1;
                 }
             }
-            
+
             // Track formatted files if this is a formatter
             if result
                 .tool
@@ -541,7 +541,9 @@ impl OutputFormatter for PrettyFormatter {
             output.push_str(&format!(
                 "\n  {} {} {}\n",
                 "✓".bright_green().bold(),
-                format!("{} of {} linters", tools_with_no_issues, linters_run).bright_green().bold(),
+                format!("{} of {} linters", tools_with_no_issues, linters_run)
+                    .bright_green()
+                    .bold(),
                 "found no issues".bright_green().bold()
             ));
         }

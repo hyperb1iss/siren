@@ -3,6 +3,7 @@
 
 mod cli_tests;
 mod config_tests;
+mod djlint_tests;
 mod executor_tests;
 mod integration_tests;
 mod language_tests;

@@ -7,12 +7,9 @@ use std::sync::{Arc, RwLock};
 use crate::errors::ToolError;
 use crate::models::{Language, LintResult, ToolConfig, ToolType};
 
+pub mod html;
 mod python;
 mod rust;
-
-// Re-export Python tools
-
-// Re-export Rust tools
 
 /// Trait for lint/format tools
 pub trait LintTool: Send + Sync {
@@ -164,6 +161,10 @@ impl DefaultToolRegistry {
         registry.register_tool(Arc::new(python::MyPy::new()));
         registry.register_tool(Arc::new(python::Black::new()));
         registry.register_tool(Arc::new(python::RuffFormatter::new()));
+
+        // Register HTML tools
+        registry.register_tool(Arc::new(html::DjLint::new()));
+        registry.register_tool(Arc::new(html::DjLintFormatter::new()));
 
         registry
     }
