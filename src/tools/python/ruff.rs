@@ -33,9 +33,9 @@ impl Ruff {
     fn parse_output(&self, output: &str) -> Vec<LintIssue> {
         let mut issues = Vec::new();
 
-        // Regex to match Ruff output format
-        // Format: file:line:column: error code: message
-        let regex = Regex::new(r"(?m)^(.+):(\d+):(\d+):\s+(\w+\d+):\s+(.+)$").unwrap();
+        // Regex to match Ruff output format when using --output-format=concise
+        // Format: file:line:column: error_code [*] message
+        let regex = Regex::new(r"(?m)^(.+):(\d+):(\d+):\s+(\w+\d+)(?:\s+\[\*\])?\s+(.+)$").unwrap();
 
         for capture in regex.captures_iter(output) {
             let file_str = capture.get(1).unwrap().as_str();
@@ -65,6 +65,10 @@ impl Ruff {
                 IssueSeverity::Style
             };
 
+            // Check if the issue is fixable (has [*] marker)
+            let fix_available =
+                output.contains(&format!("{}:{}:{}: {} [*]", file_str, line, column, code));
+
             issues.push(LintIssue {
                 severity,
                 message: format!("{}: {}", code, message),
@@ -72,7 +76,7 @@ impl Ruff {
                 line: Some(line),
                 column: Some(column),
                 code: Some(code.to_string()),
-                fix_available: true, // Ruff can fix most issues
+                fix_available, // Set based on [*] marker
             });
         }
 
@@ -116,7 +120,7 @@ impl Ruff {
         }
 
         // Add output format
-        command.arg("--output-format=full");
+        command.arg("--output-format=concise");
 
         // Add all the files to check - explicitly pass each file path
         for file in &files_to_check {
@@ -176,7 +180,7 @@ impl Ruff {
         }
 
         // Add output format
-        command.arg("--output-format=full");
+        command.arg("--output-format=concise");
 
         // Add all the files to fix - explicitly pass each file path
         for file in &files_to_check {
