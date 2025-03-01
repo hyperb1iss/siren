@@ -88,18 +88,28 @@ where
                 println!("  Looking for linters for {:?}...", language);
             }
 
+            // Get linters
             let language_linters = self
                 .tool_registry
                 .get_tools_for_language_and_type(*language, ToolType::Linter);
+                
+            // Also get type checkers
+            let language_type_checkers = self
+                .tool_registry
+                .get_tools_for_language_and_type(*language, ToolType::TypeChecker);
+                
+            // Combine linters and type checkers
+            let mut all_tools = language_linters;
+            all_tools.extend(language_type_checkers);
 
             if self.verbosity >= Verbosity::Normal {
                 println!(
-                    "  Found {} linters for {:?}",
-                    language_linters.len(),
+                    "  Found {} tools for {:?}",
+                    all_tools.len(),
                     language
                 );
 
-                for linter in &language_linters {
+                for linter in &all_tools {
                     println!(
                         "    - {} (available: {})",
                         linter.name(),
@@ -108,7 +118,7 @@ where
                 }
             }
 
-            for linter in language_linters {
+            for linter in all_tools {
                 if linter.is_available() {
                     linters.push(linter);
                 } else if self.verbosity >= Verbosity::Normal {
