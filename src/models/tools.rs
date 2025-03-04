@@ -13,7 +13,7 @@ pub enum ToolType {
     /// Linters (like clippy, pylint, eslint)
     Linter,
 
-    /// Type checkers (like mypy, typescript)
+    /// Type checkers (like typescript)
     TypeChecker,
 
     /// Tools that can automatically fix issues

@@ -256,9 +256,19 @@ fn test_registry_get_tools_for_language_and_type() {
         Some("22.1.0".to_string()),
     );
 
+    let python_linter = MockTool::new(
+        "mock_mypy",
+        Language::Python,
+        ToolType::Linter,
+        "A mock Python linter",
+        true,
+        Some("1.0.0".to_string()),
+    );
+
     registry.register_tool(rust_formatter);
     registry.register_tool(rust_linter);
     registry.register_tool(python_formatter);
+    registry.register_tool(python_linter);
 
     // Check that we can filter by language and type
     let rust_formatters =
@@ -275,8 +285,9 @@ fn test_registry_get_tools_for_language_and_type() {
     assert_eq!(python_formatters.len(), 1);
     assert_eq!(python_formatters[0].name(), "mock_black");
 
-    // Check that filtering for an unregistered combination returns empty
+    // Check that we can find Python linters
     let python_linters =
         registry.get_tools_for_language_and_type(Language::Python, ToolType::Linter);
-    assert_eq!(python_linters.len(), 0);
+    assert_eq!(python_linters.len(), 1);
+    assert_eq!(python_linters[0].name(), "mock_mypy");
 }

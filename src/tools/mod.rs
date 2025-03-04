@@ -8,6 +8,7 @@ use crate::errors::ToolError;
 use crate::models::{Language, LintResult, ToolConfig, ToolType};
 
 pub mod html;
+pub mod javascript;
 mod python;
 mod rust;
 
@@ -165,6 +166,11 @@ impl DefaultToolRegistry {
         // Register HTML tools
         registry.register_tool(Arc::new(html::DjLint::new()));
         registry.register_tool(Arc::new(html::DjLintFormatter::new()));
+
+        // Register JavaScript tools
+        registry.register_tool(Arc::new(javascript::Prettier::new()));
+        registry.register_tool(Arc::new(javascript::ESLint::new()));
+        registry.register_tool(Arc::new(javascript::TypeScript::new()));
 
         registry
     }

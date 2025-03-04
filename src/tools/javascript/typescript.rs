@@ -1,8 +1,7 @@
-//! MyPy linter for Python
+//! TypeScript type checker
 
 use regex::Regex;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::time::Instant;
 
 use crate::errors::ToolError;
@@ -11,31 +10,37 @@ use crate::models::{IssueSeverity, Language, LintIssue, LintResult, ToolInfo, To
 use crate::tools::{LintTool, ToolBase};
 use crate::utils;
 
-/// MyPy linter for Python
-pub struct MyPy {
+/// TypeScript type checker
+pub struct TypeScript {
     base: ToolBase,
 }
 
-impl MyPy {
-    /// Create a new MyPy linter
+impl Default for TypeScript {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl TypeScript {
+    /// Create a new TypeScript type checker
     pub fn new() -> Self {
         Self {
             base: ToolBase {
-                name: "mypy".to_string(),
-                description: "Python static type checking linter".to_string(),
-                tool_type: ToolType::Linter,
-                language: Language::Python,
+                name: "typescript".to_string(),
+                description: "TypeScript type checker".to_string(),
+                tool_type: ToolType::TypeChecker,
+                language: Language::TypeScript,
             },
         }
     }
 
-    /// Parse mypy output to extract issues
+    /// Parse TypeScript output to extract issues
     fn parse_output(&self, output: &str) -> Vec<LintIssue> {
         let mut issues = Vec::new();
 
-        // Regex to match MyPy output format
-        // Format: file:line: error: message
-        let regex = Regex::new(r"(?m)^(.+):(\d+)(?::(\d+))?: (\w+): (.+)$").unwrap();
+        // Regex to match TypeScript error output format
+        // Format: file.ts(line,col): error TS2551: message
+        let regex = Regex::new(r"(?m)^(.+)\((\d+),(\d+)\): (error|warning) (\w+): (.+)$").unwrap();
 
         for capture in regex.captures_iter(output) {
             let file_str = capture.get(1).unwrap().as_str();
@@ -51,12 +56,12 @@ impl MyPy {
                 .get(3)
                 .map(|m| m.as_str().parse::<usize>().unwrap_or(0));
             let level = capture.get(4).unwrap().as_str();
-            let message = capture.get(5).unwrap().as_str();
+            let code = capture.get(5).unwrap().as_str();
+            let message = capture.get(6).unwrap().as_str();
 
             // Determine severity
             let severity = match level {
                 "error" => IssueSeverity::Error,
-                "note" => IssueSeverity::Info,
                 _ => IssueSeverity::Warning,
             };
 
@@ -66,19 +71,19 @@ impl MyPy {
                 file: Some(file_path),
                 line: Some(line),
                 column,
-                code: None,
-                fix_available: false, // MyPy doesn't provide auto-fixes
+                code: Some(code.to_string()),
+                fix_available: false, // TypeScript doesn't provide auto-fixes through tsc
             });
         }
 
         issues
     }
 
-    /// Run mypy on multiple files to check for issues
+    /// Run TypeScript on multiple files to check for issues
     fn check_files(
         &self,
         files: &[PathBuf],
-        config: &ModelsToolConfig,
+        _config: &ModelsToolConfig,
     ) -> Result<(Vec<LintIssue>, String, String), ToolError> {
         // Skip if no files can be handled
         let files_to_check: Vec<&Path> = files
@@ -91,48 +96,21 @@ impl MyPy {
             return Ok((Vec::new(), String::new(), String::new()));
         }
 
-        let mut command = Command::new("mypy");
-
-        // Add common flags
-        command.arg("--no-pretty");
-        command.arg("--show-column-numbers");
-
-        // Add extra arguments
-        for arg in &config.extra_args {
-            command.arg(arg);
-        }
-
-        // Add all the files to check - explicitly pass each file path
-        for file in &files_to_check {
-            command.arg(file);
-        }
-
-        // Run the command
-        let output = command.output().map_err(|e| ToolError::ExecutionFailed {
-            name: self.name().to_string(),
-            message: format!("Failed to execute mypy: {}", e),
-        })?;
-
-        // Parse the output
-        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-
-        // MyPy can output to either stdout or stderr depending on the version
-        let combined_output = format!("{}\n{}", stdout, stderr).trim().to_string();
-        let issues = self.parse_output(&combined_output);
-
-        Ok((issues, stdout, stderr))
+        // TODO: Implement TypeScript execution
+        // This should run tsc --noEmit on the files
+        
+        Ok((Vec::new(), String::new(), String::new()))
     }
 }
 
-impl LintTool for MyPy {
+impl LintTool for TypeScript {
     fn name(&self) -> &str {
         &self.base.name
     }
 
     fn can_handle(&self, file_path: &Path) -> bool {
-        if let Some(ext) = file_path.extension() {
-            ext == "py" || ext == "pyi"
+        if let Some(ext) = file_path.extension().and_then(|e| e.to_str()) {
+            matches!(ext, "ts" | "tsx")
         } else {
             false
         }
@@ -145,7 +123,7 @@ impl LintTool for MyPy {
     ) -> Result<LintResult, ToolError> {
         let start = Instant::now();
 
-        // Run mypy once for all files
+        // Run TypeScript once for all files
         let (issues, stdout, stderr) = self.check_files(files, config)?;
 
         let execution_time = start.elapsed();
@@ -189,10 +167,10 @@ impl LintTool for MyPy {
     }
 
     fn is_available(&self) -> bool {
-        utils::is_command_available("mypy")
+        utils::is_command_available("tsc")
     }
 
     fn version(&self) -> Option<String> {
-        utils::get_command_version("mypy", &["--version"])
+        utils::get_command_version("tsc", &["--version"])
     }
-}
+} 

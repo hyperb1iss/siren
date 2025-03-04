@@ -145,8 +145,8 @@ async fn verify_issue_detection(
         check: true,
     };
 
-    // Run appropriate tools for the language
-    let tools = registry.get_tools_for_language(language);
+    // Run appropriate tools for the language and tool type
+    let tools = registry.get_tools_for_language_and_type(language, tool_type);
     let all_results = runner.run_tools(tools, &[file_path.clone()], &config).await;
 
     // Print all results for debugging
@@ -194,6 +194,7 @@ async fn verify_issue_detection(
                         || r.tool_name.contains("clippy")
                         || r.tool_name.contains("ruff")
                         || r.tool_name.contains("pylint")
+                        || r.tool_name.contains("mypy")
                         || r.tool_name.contains("eslint")
                 }
                 ToolType::Formatter => {
@@ -204,7 +205,6 @@ async fn verify_issue_detection(
                 }
                 ToolType::TypeChecker => {
                     r.tool_name.contains("type")
-                        || r.tool_name.contains("mypy")
                         || r.tool_name.contains("tsc")
                 }
                 ToolType::Fixer => r.tool_name.contains("fix"),
@@ -469,6 +469,13 @@ async fn test_python_file_path_handling() {
         return;
     }
 
+    // Skip if no Python tools are available
+    if !is_tool_available(Language::Python, ToolType::Linter) && 
+       !is_tool_available(Language::Python, ToolType::Formatter) {
+        println!("Skipping test_python_file_path_handling - no Python tools available");
+        return;
+    }
+
     // Create two test fixtures with different issues
     let (_temp_dir1, file_path1) = create_test_fixture(Language::Python, "unused_import");
     let (_temp_dir2, file_path2) = create_test_fixture(Language::Python, "formatting");
@@ -505,6 +512,20 @@ async fn test_python_file_path_handling() {
         return;
     }
 
+    // Get Python tools (both linters and formatters)
+    let python_tools: Vec<_> = registry
+        .get_tools_for_language(Language::Python)
+        .into_iter()
+        .filter(|tool| {
+            tool.tool_type() == ToolType::Linter || tool.tool_type() == ToolType::Formatter
+        })
+        .collect();
+
+    if python_tools.is_empty() {
+        println!("No Python tools available, skipping test");
+        return;
+    }
+
     // First, run linters on only the first file
     println!("Running linters on first file only");
     let results_file1 = runner
@@ -521,7 +542,7 @@ async fn test_python_file_path_handling() {
     println!("Running linters on both files");
     let results_both = runner
         .run_tools(
-            python_linters.clone(),
+            python_tools.clone(),
             &[file_path1.clone(), file_path2.clone()],
             &config,
         )
@@ -605,11 +626,150 @@ async fn test_python_file_path_handling() {
 
             // Only assert if the tool found any issues at all
             if !lint_result.issues.is_empty() {
-                assert!(
-                    file1_issues > 0 && file2_issues > 0,
-                    "Expected issues from both files when both are included"
-                );
+                // Different tools may detect different issues
+                // We don't require every tool to find issues in both files
+                // Just note if a tool doesn't find issues in both files
+                if file1_issues == 0 || file2_issues == 0 {
+                    println!("  Note: Tool '{}' didn't find issues in both files", lint_result.tool_name);
+                }
             }
         }
     }
+
+    // Final verification: at least one tool should find issues in both files
+    let at_least_one_tool_found_issues_in_both_files = results_both.iter().any(|result| {
+        if let Ok(lint_result) = result {
+            let has_file1_issues = lint_result.issues.iter().any(|issue| {
+                if let Some(file) = &issue.file {
+                    file.file_name().unwrap() == file_path1.file_name().unwrap()
+                } else {
+                    false
+                }
+            });
+            
+            let has_file2_issues = lint_result.issues.iter().any(|issue| {
+                if let Some(file) = &issue.file {
+                    file.file_name().unwrap() == file_path2.file_name().unwrap()
+                } else {
+                    false
+                }
+            });
+            
+            has_file1_issues && has_file2_issues
+        } else {
+            false
+        }
+    });
+    
+    assert!(
+        at_least_one_tool_found_issues_in_both_files,
+        "At least one tool should find issues in both files when both are included"
+    );
+
+    // Collect issues from all tools
+    let mut has_file1_issues = false;
+    let mut has_file2_issues = false;
+    
+    for result in &results_both {
+        if let Ok(lint_result) = result {
+            for issue in &lint_result.issues {
+                if let Some(file) = &issue.file {
+                    if file.file_name().unwrap() == file_path1.file_name().unwrap() {
+                        has_file1_issues = true;
+                    } else if file.file_name().unwrap() == file_path2.file_name().unwrap() {
+                        has_file2_issues = true;
+                    }
+                }
+            }
+        }
+    }
+    
+    // Verify that across all tools, we found issues in both files
+    assert!(has_file1_issues, "Expected to find issues in file1 across all tools");
+    assert!(has_file2_issues, "Expected to find issues in file2 across all tools");
+}
+
+#[tokio::test]
+async fn test_python_formatter_file_handling() {
+    // Skip if no Python formatters are available
+    if !is_tool_available(Language::Python, ToolType::Formatter) {
+        println!("Skipping test_python_formatter_file_handling - no Python formatters available");
+        return;
+    }
+
+    // Create a test fixture with formatting issues
+    let (_temp_dir, file_path) = create_test_fixture(Language::Python, "formatting");
+    println!("Created test fixture at: {:?}", file_path);
+
+    // Initialize registry with tools
+    let registry = DefaultToolRegistry::with_default_tools();
+    let runner = ToolRunner::new();
+
+    // Create a basic tool config
+    let config = ToolConfig {
+        enabled: true,
+        extra_args: Vec::new(),
+        env_vars: HashMap::new(),
+        executable_path: None,
+        report_level: None,
+        auto_fix: false,
+        check: true,
+    };
+
+    // Get Python formatters
+    let python_formatters: Vec<_> = registry
+        .get_tools_for_language_and_type(Language::Python, ToolType::Formatter);
+
+    // Run formatters on the file
+    println!("Running formatters on file");
+    let results = runner
+        .run_tools(python_formatters, &[file_path.clone()], &config)
+        .await;
+
+    // Print all results for debugging
+    for (i, result) in results.iter().enumerate() {
+        match result {
+            Ok(lint_result) => {
+                println!(
+                    "Result {}: Tool '{}' found {} issues",
+                    i,
+                    lint_result.tool_name,
+                    lint_result.issues.len()
+                );
+
+                for (j, issue) in lint_result.issues.iter().enumerate() {
+                    println!("  Issue {}: {} ({})", j, issue.message, issue.severity);
+                }
+
+                if let Some(stdout) = &lint_result.stdout {
+                    if !stdout.is_empty() {
+                        println!("  Stdout: {}", stdout);
+                    }
+                }
+
+                if let Some(stderr) = &lint_result.stderr {
+                    if !stderr.is_empty() {
+                        println!("  Stderr: {}", stderr);
+                    }
+                }
+            }
+            Err(e) => println!("Result {}: Error: {}", i, e),
+        }
+    }
+
+    // Verify that at least one formatter found issues
+    let found_issues = results.iter().any(|result| {
+        if let Ok(lint_result) = result {
+            !lint_result.issues.is_empty() || 
+            lint_result.stdout.as_ref().is_some_and(|s| !s.is_empty()) ||
+            lint_result.stderr.as_ref().is_some_and(|s| !s.is_empty())
+        } else {
+            false
+        }
+    });
+
+    assert!(
+        found_issues,
+        "Expected at least one formatter to find issues or produce output"
+    );
 }

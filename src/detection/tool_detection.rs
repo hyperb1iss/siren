@@ -249,7 +249,7 @@ fn detect_python_tools(dir: &Path, tools: &mut Vec<DetectedTool>) {
         tools.push(DetectedTool {
             name: "mypy".to_string(),
             config_path: mypy_ini,
-            tool_type: ToolType::TypeChecker,
+            tool_type: ToolType::Linter,
             language: Language::Python,
         });
     }
@@ -261,7 +261,7 @@ fn detect_python_tools(dir: &Path, tools: &mut Vec<DetectedTool>) {
         tools.push(DetectedTool {
             name: "mypy".to_string(),
             config_path: alt_mypy_ini,
-            tool_type: ToolType::TypeChecker,
+            tool_type: ToolType::Linter,
             language: Language::Python,
         });
     }
