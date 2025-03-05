@@ -99,6 +99,12 @@ console.log(   badlyFormattedFunction(1,2,   3));
     file.write_all(content.trim().as_bytes())
         .expect("Failed to write test content");
 
+    // For Python tests, create an __init__.py file to make it a valid package
+    if language == Language::Python {
+        let init_path = temp_dir.path().join("__init__.py");
+        File::create(&init_path).expect("Failed to create __init__.py file");
+    }
+
     (temp_dir, file_path)
 }
 

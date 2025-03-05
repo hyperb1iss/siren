@@ -138,10 +138,15 @@ impl LintTool for MyPy {
 
     fn can_handle(&self, file_path: &Path) -> bool {
         if let Some(ext) = file_path.extension() {
-            ext == "py" || ext == "pyi"
-        } else {
-            false
+            if ext == "py" || ext == "pyi" {
+                // Check if the file is in a valid Python package
+                if let Some(parent) = file_path.parent() {
+                    return utils::is_valid_python_package(parent);
+                }
+                return true;
+            }
         }
+        false
     }
 
     fn execute(

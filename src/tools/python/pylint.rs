@@ -157,10 +157,15 @@ impl LintTool for PyLint {
 
     fn can_handle(&self, file_path: &Path) -> bool {
         if let Some(ext) = file_path.extension() {
-            ext == "py"
-        } else {
-            false
+            if ext == "py" {
+                // Check if the file is in a valid Python package
+                if let Some(parent) = file_path.parent() {
+                    return utils::is_valid_python_package(parent);
+                }
+                return true;
+            }
         }
+        false
     }
 
     fn execute(

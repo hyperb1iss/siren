@@ -337,13 +337,17 @@ pub fn optimize_paths_for_tools(files: &[PathBuf]) -> Vec<PathBuf> {
             // This is a simple heuristic to avoid scanning unrelated directories
             let is_project_dir = dir.starts_with(std::env::current_dir().unwrap_or_default());
 
-            if is_project_dir {
+            // For Python files, check if this is a valid Python package
+            let is_python_files = extensions.iter().any(|ext| *ext == "py");
+            let is_valid_package = !is_python_files || is_valid_python_package(&dir);
+
+            if is_project_dir && is_valid_package {
                 result.push(dir);
                 for file_path in &unhandled_files {
                     handled_files.insert(file_path.clone());
                 }
             } else {
-                // Add individual files if not a project directory
+                // Add individual files if not a project directory or not a valid Python package
                 for file_path in &unhandled_files {
                     result.push(file_path.clone());
                     handled_files.insert(file_path.clone());
@@ -358,7 +362,7 @@ pub fn optimize_paths_for_tools(files: &[PathBuf]) -> Vec<PathBuf> {
         }
     }
 
-    // Add any remaining unhandled files individually
+    // Add any remaining files that weren't handled
     for file in files {
         if !handled_files.contains(file) {
             result.push(file.clone());
@@ -366,4 +370,42 @@ pub fn optimize_paths_for_tools(files: &[PathBuf]) -> Vec<PathBuf> {
     }
 
     result
+}
+
+/// Check if a directory is a valid Python package
+///
+/// A directory is considered a valid Python package if it or any of its
+/// parent directories (up to the current working directory) contains an __init__.py file.
+/// This helps prevent scanning Python files in non-package directories like docs or examples.
+pub fn is_valid_python_package(dir: &Path) -> bool {
+    // Get the current working directory
+    let cwd = match std::env::current_dir() {
+        Ok(cwd) => cwd,
+        Err(_) => return true, // If we can't get the current directory, assume it's valid
+    };
+
+    // Start from the given directory and check each parent up to cwd
+    let mut current = dir.to_path_buf();
+
+    // Check if the directory itself has an __init__.py
+    if current.join("__init__.py").exists() {
+        return true;
+    }
+
+    // Check parent directories until we reach cwd
+    while let Some(parent) = current.parent() {
+        // Stop if we've reached or gone beyond the current working directory
+        if !parent.starts_with(&cwd) || parent == Path::new("") {
+            break;
+        }
+
+        // Check for __init__.py in this parent
+        if parent.join("__init__.py").exists() {
+            return true;
+        }
+
+        current = parent.to_path_buf();
+    }
+
+    false
 }
