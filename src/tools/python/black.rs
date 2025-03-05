@@ -27,99 +27,6 @@ impl Black {
             },
         }
     }
-
-    /// Run black on a file to check if it needs formatting
-    fn check_file(
-        &self,
-        file: &Path,
-        config: &ModelsToolConfig,
-    ) -> Result<Vec<LintIssue>, ToolError> {
-        let mut command = Command::new("black");
-        command.arg("--check");
-        command.arg("--quiet");
-
-        // Add line length if specified in extra args
-        // Look for --line-length in extra_args
-        let has_line_length = config
-            .extra_args
-            .iter()
-            .any(|arg| arg.starts_with("--line-length"));
-        if !has_line_length {
-            // Default line length for black
-            command.arg("--line-length").arg("88");
-        }
-
-        // Add extra arguments
-        for arg in &config.extra_args {
-            command.arg(arg);
-        }
-
-        // Add the file to format
-        command.arg(file);
-
-        // Run the command
-        let output = command.output().map_err(|e| ToolError::ExecutionFailed {
-            name: self.name().to_string(),
-            message: format!("Failed to execute black: {}", e),
-        })?;
-
-        // Parse the output
-        if output.status.success() {
-            // No formatting issues
-            Ok(Vec::new())
-        } else {
-            // File needs formatting
-            Ok(vec![LintIssue {
-                severity: IssueSeverity::Style,
-                message: "File needs formatting".to_string(),
-                file: Some(file.to_path_buf()),
-                line: None,
-                column: None,
-                code: None,
-                fix_available: true,
-            }])
-        }
-    }
-
-    /// Fix formatting issues with black
-    fn fix_file(&self, file: &Path, config: &ModelsToolConfig) -> Result<(), ToolError> {
-        let mut command = Command::new("black");
-        command.arg("--quiet");
-
-        // Add line length if specified in extra args
-        // Look for --line-length in extra_args
-        let has_line_length = config
-            .extra_args
-            .iter()
-            .any(|arg| arg.starts_with("--line-length"));
-        if !has_line_length {
-            // Default line length for black
-            command.arg("--line-length").arg("88");
-        }
-
-        // Add extra arguments
-        for arg in &config.extra_args {
-            command.arg(arg);
-        }
-
-        // Add the file to format
-        command.arg(file);
-
-        // Run the command
-        let output = command.output().map_err(|e| ToolError::ExecutionFailed {
-            name: self.name().to_string(),
-            message: format!("Failed to execute black: {}", e),
-        })?;
-
-        if !output.status.success() {
-            return Err(ToolError::ExecutionFailed {
-                name: self.name().to_string(),
-                message: String::from_utf8_lossy(&output.stderr).to_string(),
-            });
-        }
-
-        Ok(())
-    }
 }
 
 impl LintTool for Black {
@@ -146,23 +53,95 @@ impl LintTool for Black {
         // Check if we should fix issues
         let fix_mode = config.auto_fix;
 
-        // Process each file
-        for file in files {
-            if !self.can_handle(file) {
-                continue;
-            }
+        // Filter files that can be handled by black
+        let files_to_process: Vec<PathBuf> = files
+            .iter()
+            .filter(|file| self.can_handle(file))
+            .cloned()
+            .collect();
 
-            if fix_mode {
-                // Fix the file
-                self.fix_file(file, config)?
-            } else {
-                // Check the file
-                match self.check_file(file, config) {
-                    Ok(file_issues) => {
-                        issues.extend(file_issues);
-                    }
-                    Err(e) => {
-                        return Err(e);
+        if files_to_process.is_empty() {
+            return Ok(LintResult {
+                tool_name: self.name().to_string(),
+                tool: Some(ToolInfo {
+                    name: self.name().to_string(),
+                    tool_type: self.tool_type(),
+                    language: self.language(),
+                    available: self.is_available(),
+                    version: self.version(),
+                    description: self.description().to_string(),
+                }),
+                success: true,
+                issues: Vec::new(),
+                execution_time: start.elapsed(),
+                stdout: None,
+                stderr: None,
+            });
+        }
+
+        // Optimize paths by grouping by directory when possible
+        let optimized_paths = utils::optimize_paths_for_tools(&files_to_process);
+
+        // Create a single command for all files
+        let mut command = Command::new("black");
+
+        // Add common flags
+        command.arg("--quiet");
+
+        // Add check mode if not fixing
+        if !fix_mode {
+            command.arg("--check");
+        }
+
+        // Add line length if specified in extra args
+        // Look for --line-length in extra_args
+        let has_line_length = config
+            .extra_args
+            .iter()
+            .any(|arg| arg.starts_with("--line-length"));
+        if !has_line_length {
+            // Default line length for black
+            command.arg("--line-length").arg("88");
+        }
+
+        // Add extra arguments
+        for arg in &config.extra_args {
+            command.arg(arg);
+        }
+
+        // Add all paths to process
+        for path in &optimized_paths {
+            command.arg(path);
+        }
+
+        // Log the command
+        utils::log_command(&command);
+
+        // Run the command
+        let output = command.output().map_err(|e| ToolError::ExecutionFailed {
+            name: self.name().to_string(),
+            message: format!("Failed to execute black: {}", e),
+        })?;
+
+        // Parse the output
+        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+        // If in check mode and command failed, it means formatting issues were found
+        if !fix_mode && !output.status.success() {
+            // Parse the output to find which files have formatting issues
+            for line in stdout.lines().chain(stderr.lines()) {
+                if line.contains("would be reformatted") {
+                    if let Some(file_path) = line.split_whitespace().next() {
+                        issues.push(LintIssue {
+                            severity: IssueSeverity::Style,
+                            message: "File needs formatting".to_string(),
+                            file: Some(PathBuf::from(file_path)),
+                            line: None,
+                            column: None,
+                            code: None,
+                            fix_available: true,
+                        });
                     }
                 }
             }
@@ -180,11 +159,19 @@ impl LintTool for Black {
                 version: self.version(),
                 description: self.description().to_string(),
             }),
-            success: issues.is_empty(),
+            success: output.status.success(),
             issues,
             execution_time,
-            stdout: None,
-            stderr: None,
+            stdout: if stdout.is_empty() {
+                None
+            } else {
+                Some(stdout)
+            },
+            stderr: if stderr.is_empty() {
+                None
+            } else {
+                Some(stderr)
+            },
         })
     }
 

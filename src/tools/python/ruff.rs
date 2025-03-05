@@ -1,5 +1,6 @@
 //! Ruff linter for Python
 
+use log::debug;
 use regex::Regex;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -90,42 +91,37 @@ impl Ruff {
         config: &ModelsToolConfig,
     ) -> Result<(Vec<LintIssue>, String, String), ToolError> {
         // Skip if no files can be handled
-        let files_to_check: Vec<&Path> = files
+        let files_to_check: Vec<PathBuf> = files
             .iter()
             .filter(|file| self.can_handle(file))
-            .map(|file| file.as_path())
+            .cloned()
             .collect();
 
         if files_to_check.is_empty() {
             return Ok((Vec::new(), String::new(), String::new()));
         }
 
+        // Optimize paths by grouping by directory when possible
+        let optimized_paths = utils::optimize_paths_for_tools(&files_to_check);
+
         let mut command = Command::new("ruff");
         command.arg("check");
 
-        // Set default line length to 88
-        let mut has_line_length = false;
-
         // Add extra arguments
         for arg in &config.extra_args {
-            if arg.starts_with("--line-length") {
-                has_line_length = true;
-            }
             command.arg(arg);
-        }
-
-        // Add default line length if not specified
-        if !has_line_length {
-            command.arg("--line-length=88");
         }
 
         // Add output format
         command.arg("--output-format=concise");
 
-        // Add all the files to check - explicitly pass each file path
-        for file in &files_to_check {
-            command.arg(file);
+        // Add all the paths to check
+        for path in &optimized_paths {
+            command.arg(path);
         }
+
+        // Log the command
+        utils::log_command(&command);
 
         // Run the command
         let output = command.output().map_err(|e| ToolError::ExecutionFailed {
@@ -149,43 +145,38 @@ impl Ruff {
         config: &ModelsToolConfig,
     ) -> Result<(String, String), ToolError> {
         // Skip if no files can be handled
-        let files_to_check: Vec<&Path> = files
+        let files_to_check: Vec<PathBuf> = files
             .iter()
             .filter(|file| self.can_handle(file))
-            .map(|file| file.as_path())
+            .cloned()
             .collect();
 
         if files_to_check.is_empty() {
             return Ok((String::new(), String::new()));
         }
 
+        // Optimize paths by grouping by directory when possible
+        let optimized_paths = utils::optimize_paths_for_tools(&files_to_check);
+
         let mut command = Command::new("ruff");
         command.arg("check");
         command.arg("--fix");
 
-        // Set default line length to 88
-        let mut has_line_length = false;
-
         // Add extra arguments
         for arg in &config.extra_args {
-            if arg.starts_with("--line-length") {
-                has_line_length = true;
-            }
             command.arg(arg);
-        }
-
-        // Add default line length if not specified
-        if !has_line_length {
-            command.arg("--line-length=88");
         }
 
         // Add output format
         command.arg("--output-format=concise");
 
-        // Add all the files to fix - explicitly pass each file path
-        for file in &files_to_check {
-            command.arg(file);
+        // Add all the paths to fix
+        for path in &optimized_paths {
+            command.arg(path);
         }
+
+        // Log the command
+        utils::log_command(&command);
 
         // Run the command
         let output = command.output().map_err(|e| ToolError::ExecutionFailed {
@@ -327,15 +318,18 @@ impl RuffFormatter {
         config: &ModelsToolConfig,
     ) -> Result<(String, String), ToolError> {
         // Skip if no files can be handled
-        let files_to_format: Vec<&Path> = files
+        let files_to_format: Vec<PathBuf> = files
             .iter()
             .filter(|file| self.can_handle(file))
-            .map(|file| file.as_path())
+            .cloned()
             .collect();
 
         if files_to_format.is_empty() {
             return Ok((String::new(), String::new()));
         }
+
+        // Optimize paths by grouping by directory when possible
+        let optimized_paths = utils::optimize_paths_for_tools(&files_to_format);
 
         let mut command = Command::new("ruff");
         command.arg("format");
@@ -345,26 +339,18 @@ impl RuffFormatter {
             command.arg("--check");
         }
 
-        // Set default line length to 88
-        let mut has_line_length = false;
-
         // Add extra arguments
         for arg in &config.extra_args {
-            if arg.starts_with("--line-length") {
-                has_line_length = true;
-            }
             command.arg(arg);
         }
 
-        // Add default line length if not specified
-        if !has_line_length {
-            command.arg("--line-length=88");
+        // Add all the paths to format
+        for path in &optimized_paths {
+            command.arg(path);
         }
 
-        // Add all the files to format - explicitly pass each file path
-        for file in &files_to_format {
-            command.arg(file);
-        }
+        // Log the command
+        utils::log_command(&command);
 
         // Run the command
         let output = command.output().map_err(|e| ToolError::ExecutionFailed {
@@ -406,15 +392,24 @@ impl LintTool for RuffFormatter {
         // Parse the output to determine if formatting is needed
         let mut issues = Vec::new();
 
+        // Debug output to help diagnose issues
+        debug!("Ruff formatter stdout: {}", stdout);
+        debug!("Ruff formatter stderr: {}", stderr);
+
         // When in check mode, ruff format will output "Would reformat X" for files that need formatting
-        if config.check && (stdout.contains("Would reformat") || stderr.contains("Would reformat"))
-        {
+        if config.check {
             // Extract file paths that would be reformatted
             let would_reformat_regex = Regex::new(r"Would reformat: (.+)").unwrap();
+            let files_reformatted_regex = Regex::new(r"(\d+) files? would be reformatted").unwrap();
 
+            // Check if any files would be reformatted
+            let mut found_specific_files = false;
+
+            // First check for specific files
             for line in stdout.lines().chain(stderr.lines()) {
                 if let Some(captures) = would_reformat_regex.captures(line) {
                     if let Some(file_match) = captures.get(1) {
+                        found_specific_files = true;
                         let file_path = PathBuf::from(file_match.as_str());
 
                         issues.push(LintIssue {
@@ -431,11 +426,37 @@ impl LintTool for RuffFormatter {
             }
 
             // If we couldn't extract specific files but know formatting is needed
-            if issues.is_empty()
-                && (stdout.contains("would be reformatted")
-                    || stderr.contains("would be reformatted"))
-            {
-                // Add a generic issue for each file
+            if !found_specific_files {
+                for line in stdout.lines().chain(stderr.lines()) {
+                    if let Some(captures) = files_reformatted_regex.captures(line) {
+                        if let Some(count_match) = captures.get(1) {
+                            if let Ok(count) = count_match.as_str().parse::<usize>() {
+                                if count > 0 {
+                                    // Add a generic issue for each file
+                                    for file in files {
+                                        if self.can_handle(file) {
+                                            issues.push(LintIssue {
+                                                severity: IssueSeverity::Style,
+                                                message: "File needs formatting".to_string(),
+                                                file: Some(file.clone()),
+                                                line: None,
+                                                column: None,
+                                                code: None,
+                                                fix_available: true,
+                                            });
+                                        }
+                                    }
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // If we still haven't found any issues but the command exited with a non-zero status,
+            // assume formatting is needed for all files
+            if issues.is_empty() && !stdout.is_empty() {
                 for file in files {
                     if self.can_handle(file) {
                         issues.push(LintIssue {

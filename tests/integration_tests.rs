@@ -204,8 +204,7 @@ async fn verify_issue_detection(
                         || r.tool_name.contains("prettier")
                 }
                 ToolType::TypeChecker => {
-                    r.tool_name.contains("type")
-                        || r.tool_name.contains("tsc")
+                    r.tool_name.contains("type") || r.tool_name.contains("tsc")
                 }
                 ToolType::Fixer => r.tool_name.contains("fix"),
             }
@@ -470,8 +469,9 @@ async fn test_python_file_path_handling() {
     }
 
     // Skip if no Python tools are available
-    if !is_tool_available(Language::Python, ToolType::Linter) && 
-       !is_tool_available(Language::Python, ToolType::Formatter) {
+    if !is_tool_available(Language::Python, ToolType::Linter)
+        && !is_tool_available(Language::Python, ToolType::Formatter)
+    {
         println!("Skipping test_python_file_path_handling - no Python tools available");
         return;
     }
@@ -630,7 +630,10 @@ async fn test_python_file_path_handling() {
                 // We don't require every tool to find issues in both files
                 // Just note if a tool doesn't find issues in both files
                 if file1_issues == 0 || file2_issues == 0 {
-                    println!("  Note: Tool '{}' didn't find issues in both files", lint_result.tool_name);
+                    println!(
+                        "  Note: Tool '{}' didn't find issues in both files",
+                        lint_result.tool_name
+                    );
                 }
             }
         }
@@ -646,7 +649,7 @@ async fn test_python_file_path_handling() {
                     false
                 }
             });
-            
+
             let has_file2_issues = lint_result.issues.iter().any(|issue| {
                 if let Some(file) = &issue.file {
                     file.file_name().unwrap() == file_path2.file_name().unwrap()
@@ -654,13 +657,13 @@ async fn test_python_file_path_handling() {
                     false
                 }
             });
-            
+
             has_file1_issues && has_file2_issues
         } else {
             false
         }
     });
-    
+
     assert!(
         at_least_one_tool_found_issues_in_both_files,
         "At least one tool should find issues in both files when both are included"
@@ -669,7 +672,7 @@ async fn test_python_file_path_handling() {
     // Collect issues from all tools
     let mut has_file1_issues = false;
     let mut has_file2_issues = false;
-    
+
     for result in &results_both {
         if let Ok(lint_result) = result {
             for issue in &lint_result.issues {
@@ -683,10 +686,16 @@ async fn test_python_file_path_handling() {
             }
         }
     }
-    
+
     // Verify that across all tools, we found issues in both files
-    assert!(has_file1_issues, "Expected to find issues in file1 across all tools");
-    assert!(has_file2_issues, "Expected to find issues in file2 across all tools");
+    assert!(
+        has_file1_issues,
+        "Expected to find issues in file1 across all tools"
+    );
+    assert!(
+        has_file2_issues,
+        "Expected to find issues in file2 across all tools"
+    );
 }
 
 #[tokio::test]
@@ -717,8 +726,8 @@ async fn test_python_formatter_file_handling() {
     };
 
     // Get Python formatters
-    let python_formatters: Vec<_> = registry
-        .get_tools_for_language_and_type(Language::Python, ToolType::Formatter);
+    let python_formatters: Vec<_> =
+        registry.get_tools_for_language_and_type(Language::Python, ToolType::Formatter);
 
     // Run formatters on the file
     println!("Running formatters on file");
@@ -760,9 +769,9 @@ async fn test_python_formatter_file_handling() {
     // Verify that at least one formatter found issues
     let found_issues = results.iter().any(|result| {
         if let Ok(lint_result) = result {
-            !lint_result.issues.is_empty() || 
-            lint_result.stdout.as_ref().is_some_and(|s| !s.is_empty()) ||
-            lint_result.stderr.as_ref().is_some_and(|s| !s.is_empty())
+            !lint_result.issues.is_empty()
+                || lint_result.stdout.as_ref().is_some_and(|s| !s.is_empty())
+                || lint_result.stderr.as_ref().is_some_and(|s| !s.is_empty())
         } else {
             false
         }

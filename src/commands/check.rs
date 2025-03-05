@@ -92,22 +92,18 @@ where
             let language_linters = self
                 .tool_registry
                 .get_tools_for_language_and_type(*language, ToolType::Linter);
-                
+
             // Also get type checkers
             let language_type_checkers = self
                 .tool_registry
                 .get_tools_for_language_and_type(*language, ToolType::TypeChecker);
-                
+
             // Combine linters and type checkers
             let mut all_tools = language_linters;
             all_tools.extend(language_type_checkers);
 
             if self.verbosity >= Verbosity::Normal {
-                println!(
-                    "  Found {} tools for {:?}",
-                    all_tools.len(),
-                    language
-                );
+                println!("  Found {} tools for {:?}", all_tools.len(), language);
 
                 for linter in &all_tools {
                     println!(

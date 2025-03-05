@@ -2,6 +2,7 @@
 
 use globset::{Glob, GlobSetBuilder};
 use log::{debug, log_enabled, Level};
+use std::collections::{HashMap, HashSet};
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -269,4 +270,100 @@ pub fn collect_files_with_gitignore(dir: &Path) -> Result<Vec<PathBuf>, crate::e
     }
 
     Ok(files)
+}
+
+/// Optimize file paths by grouping them by directory when possible
+/// This helps reduce command line length and improves performance for tools
+/// that can process entire directories at once
+pub fn optimize_paths_for_tools(files: &[PathBuf]) -> Vec<PathBuf> {
+    if files.is_empty() {
+        return Vec::new();
+    }
+
+    // First, find common parent directories for the files
+    let mut dir_files: HashMap<PathBuf, Vec<PathBuf>> = HashMap::new();
+
+    // Group files by their immediate parent directory
+    for file in files {
+        if let Some(parent) = file.parent() {
+            dir_files
+                .entry(parent.to_path_buf())
+                .or_default()
+                .push(file.clone());
+        } else {
+            // If no parent (e.g., root files), keep them as is
+            dir_files
+                .entry(PathBuf::from("."))
+                .or_default()
+                .push(file.clone());
+        }
+    }
+
+    // Find directories where all files have the same extension
+    let mut result = Vec::new();
+    let mut handled_files = HashSet::new();
+
+    // Process directories with most files first (most likely to benefit from optimization)
+    let mut dirs: Vec<_> = dir_files.into_iter().collect();
+    dirs.sort_by(|a, b| b.1.len().cmp(&a.1.len()));
+
+    for (dir, dir_files) in dirs {
+        // Skip if all files in this directory are already handled
+        if dir_files.iter().all(|f| handled_files.contains(f)) {
+            continue;
+        }
+
+        // Get unhandled files in this directory
+        let unhandled_files: Vec<_> = dir_files
+            .iter()
+            .filter(|f| !handled_files.contains(*f))
+            .cloned()
+            .collect();
+
+        if unhandled_files.is_empty() {
+            continue;
+        }
+
+        // Check if all files have the same extension
+        let extensions: HashSet<_> = unhandled_files
+            .iter()
+            .filter_map(|f| f.extension())
+            .collect();
+
+        // If all files have the same extension and there are multiple files,
+        // use the directory instead
+        if extensions.len() <= 1 && unhandled_files.len() > 1 {
+            // Only use the directory if it's within the project (not system directories)
+            // This is a simple heuristic to avoid scanning unrelated directories
+            let is_project_dir = dir.starts_with(std::env::current_dir().unwrap_or_default());
+
+            if is_project_dir {
+                result.push(dir);
+                for file_path in &unhandled_files {
+                    handled_files.insert(file_path.clone());
+                }
+            } else {
+                // Add individual files if not a project directory
+                for file_path in &unhandled_files {
+                    result.push(file_path.clone());
+                    handled_files.insert(file_path.clone());
+                }
+            }
+        } else {
+            // Add individual files if they have different extensions
+            for file_path in &unhandled_files {
+                result.push(file_path.clone());
+                handled_files.insert(file_path.clone());
+            }
+        }
+    }
+
+    // Add any remaining unhandled files individually
+    for file in files {
+        if !handled_files.contains(file) {
+            result.push(file.clone());
+        }
+    }
+
+    result
 }

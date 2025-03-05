@@ -26,7 +26,8 @@ impl Prettier {
         Self {
             base: ToolBase {
                 name: "prettier".to_string(),
-                description: "Opinionated code formatter for JavaScript, TypeScript, and more".to_string(),
+                description: "Opinionated code formatter for JavaScript, TypeScript, and more"
+                    .to_string(),
                 tool_type: ToolType::Formatter,
                 language: Language::JavaScript, // Also handles TypeScript
             },
@@ -38,7 +39,19 @@ impl Prettier {
         if let Some(ext) = file_path.extension().and_then(|e| e.to_str()) {
             matches!(
                 ext,
-                "js" | "jsx" | "ts" | "tsx" | "json" | "css" | "scss" | "less" | "html" | "vue" | "graphql" | "md" | "yaml" | "yml"
+                "js" | "jsx"
+                    | "ts"
+                    | "tsx"
+                    | "json"
+                    | "css"
+                    | "scss"
+                    | "less"
+                    | "html"
+                    | "vue"
+                    | "graphql"
+                    | "md"
+                    | "yaml"
+                    | "yml"
             )
         } else {
             false
@@ -57,11 +70,7 @@ impl Prettier {
     }
 
     /// Fix formatting issues in a file
-    fn fix_file(
-        &self,
-        _file_path: &Path,
-        _config: &ModelsToolConfig,
-    ) -> Result<(), ToolError> {
+    fn fix_file(&self, _file_path: &Path, _config: &ModelsToolConfig) -> Result<(), ToolError> {
         // TODO: Implement fix_file logic
         // This should run prettier --write on the file
         Ok(())
@@ -149,4 +158,4 @@ impl LintTool for Prettier {
     fn version(&self) -> Option<String> {
         utils::get_command_version("prettier", &["--version"])
     }
-} 
+}

@@ -33,13 +33,6 @@ impl ESLint {
         }
     }
 
-    /// Parse ESLint JSON output to extract issues
-    fn parse_output(&self, _output: &str) -> Vec<LintIssue> {
-        // TODO: Implement parsing of ESLint JSON output
-        // ESLint can output in JSON format with --format=json
-        Vec::new()
-    }
-
     /// Run ESLint on multiple files to check for issues
     fn check_files(
         &self,
@@ -59,16 +52,12 @@ impl ESLint {
 
         // TODO: Implement ESLint execution
         // This should run eslint --format=json on the files
-        
+
         Ok((Vec::new(), String::new(), String::new()))
     }
 
     /// Fix issues in multiple files
-    fn fix_files(
-        &self,
-        files: &[PathBuf],
-        _config: &ModelsToolConfig,
-    ) -> Result<(), ToolError> {
+    fn fix_files(&self, files: &[PathBuf], _config: &ModelsToolConfig) -> Result<(), ToolError> {
         // Skip if no files can be handled
         let files_to_fix: Vec<&Path> = files
             .iter()
@@ -82,7 +71,7 @@ impl ESLint {
 
         // TODO: Implement ESLint fix execution
         // This should run eslint --fix on the files
-        
+
         Ok(())
     }
 }
@@ -111,7 +100,7 @@ impl LintTool for ESLint {
         if config.auto_fix {
             // Fix the files
             self.fix_files(files, config)?;
-            
+
             // Return an empty result since we fixed the issues
             let execution_time = start.elapsed();
             return Ok(LintResult {
@@ -182,4 +171,4 @@ impl LintTool for ESLint {
     fn version(&self) -> Option<String> {
         utils::get_command_version("eslint", &["--version"])
     }
-} 
+}

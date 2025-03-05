@@ -1,12 +1,11 @@
 //! TypeScript type checker
 
-use regex::Regex;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use crate::errors::ToolError;
 use crate::models::tools::ToolConfig as ModelsToolConfig;
-use crate::models::{IssueSeverity, Language, LintIssue, LintResult, ToolInfo, ToolType};
+use crate::models::{Language, LintIssue, LintResult, ToolInfo, ToolType};
 use crate::tools::{LintTool, ToolBase};
 use crate::utils;
 
@@ -34,51 +33,6 @@ impl TypeScript {
         }
     }
 
-    /// Parse TypeScript output to extract issues
-    fn parse_output(&self, output: &str) -> Vec<LintIssue> {
-        let mut issues = Vec::new();
-
-        // Regex to match TypeScript error output format
-        // Format: file.ts(line,col): error TS2551: message
-        let regex = Regex::new(r"(?m)^(.+)\((\d+),(\d+)\): (error|warning) (\w+): (.+)$").unwrap();
-
-        for capture in regex.captures_iter(output) {
-            let file_str = capture.get(1).unwrap().as_str();
-            let file_path = PathBuf::from(file_str);
-
-            let line = capture
-                .get(2)
-                .unwrap()
-                .as_str()
-                .parse::<usize>()
-                .unwrap_or(0);
-            let column = capture
-                .get(3)
-                .map(|m| m.as_str().parse::<usize>().unwrap_or(0));
-            let level = capture.get(4).unwrap().as_str();
-            let code = capture.get(5).unwrap().as_str();
-            let message = capture.get(6).unwrap().as_str();
-
-            // Determine severity
-            let severity = match level {
-                "error" => IssueSeverity::Error,
-                _ => IssueSeverity::Warning,
-            };
-
-            issues.push(LintIssue {
-                severity,
-                message: message.to_string(),
-                file: Some(file_path),
-                line: Some(line),
-                column,
-                code: Some(code.to_string()),
-                fix_available: false, // TypeScript doesn't provide auto-fixes through tsc
-            });
-        }
-
-        issues
-    }
-
     /// Run TypeScript on multiple files to check for issues
     fn check_files(
         &self,
@@ -98,7 +52,7 @@ impl TypeScript {
 
         // TODO: Implement TypeScript execution
         // This should run tsc --noEmit on the files
-        
+
         Ok((Vec::new(), String::new(), String::new()))
     }
 }
@@ -173,4 +127,4 @@ impl LintTool for TypeScript {
     fn version(&self) -> Option<String> {
         utils::get_command_version("tsc", &["--version"])
     }
-} 
+}

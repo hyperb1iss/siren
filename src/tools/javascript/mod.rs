@@ -1,11 +1,9 @@
 //! JavaScript and TypeScript tools
 
-mod prettier;
 mod eslint;
+mod prettier;
 mod typescript;
 
-pub use prettier::Prettier;
 pub use eslint::ESLint;
+pub use prettier::Prettier;
 pub use typescript::TypeScript;
-
- 
