@@ -5,8 +5,8 @@
 [![Status](https://img.shields.io/badge/status-in_development-blue?logo=github&logoColor=white)](https://github.com/hyperb1iss/siren)
 [![Language](https://img.shields.io/badge/built_with-Rust-orange?logo=rust)](https://www.rust-lang.org/)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue?logo=apache)](LICENSE)
-[![Tools](https://img.shields.io/badge/supported_tools-30%2B-purple?logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjIiPjxwYXRoIGQ9Ik0xMiAyQzYuNDggMiAyIDYuNDggMiAxMnM0LjQ4IDEwIDEwIDEwIDEwLTQuNDggMTAtMTBTMTcuNTIgMiAxMiAyem0xIDE1aC0ydi0yaDJ2MnptMC00aC0yVjdoMnY2eiIvPjwvc3ZnPg==)](README.md#-supported-languages--tools)
-[![Languages](https://img.shields.io/badge/languages-20%2B-green?logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjIiPjxwYXRoIGQ9Ik0xMCAyMGw0LTE2bTQgMTJsNy03LTctN00zIDE2bDctNy03LTciLz48L3N2Zz4=)](README.md#-supported-languages--tools)
+[![Tools](https://img.shields.io/badge/supported_tools-15%2B-purple?logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjIiPjxwYXRoIGQ9Ik0xMiAyQzYuNDggMiAyIDYuNDggMiAxMnM0LjQ4IDEwIDEwIDEwIDEwLTQuNDggMTAtMTBTMTcuNTIgMiAxMiAyem0xIDE1aC0ydi0yaDJ2MnptMC00aC0yVjdoMnY2eiIvPjwvc3ZnPg==)](README.md#-supported-languages--tools)
+[![Languages](https://img.shields.io/badge/languages-5%2B-green?logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjIiPjxwYXRoIGQ9Ik0xMCAyMGw0LTE2bTQgMTJsNy03LTctN00zIDE2bDctNy03LTciLz48L3N2Zz4=)](README.md#-supported-languages--tools)
 
 Siren is a powerful frontend for multiple linting tools that makes maintaining code quality a delightful experience. Inspired by the mythological sirens, Siren draws developers in with beautiful vibrant output, smart defaults, and an intuitive interface - making code quality standards irresistible to adopt.
 
@@ -16,7 +16,7 @@ Siren is a powerful frontend for multiple linting tools that makes maintaining c
 
 ## ✨ Core Features
 
-- 🌈 **Multi-language Support** - Seamlessly works with 20+ programming languages
+- 🌈 **Multi-language Support** - Currently works with Rust, Python, JavaScript/TypeScript and HTML/Templates
 - 🔍 **Framework Detection** - Automatically identifies project types and frameworks
 - 🧙‍♀️ **Smart Tool Selection** - Chooses the right linters based on detected technologies
 - 🪄 **Unified Interface** - One command to rule all your linting needs
@@ -69,34 +69,30 @@ siren check src/components/
 
 # Target a specific language
 siren check --lang rust
+
+# Format and fix in one command
+siren format-fix src/
 ```
 
-## 💖 Supported Languages & Tools
+## 💖 Currently Supported Languages & Tools
 
-Siren supports a rich collection of languages and tools, automatically selecting the best options for your project.
+Siren supports a growing collection of languages and tools, automatically selecting the best options for your project.
 
 | Language          | Formatting              | Linting                | Type Checking | Fixing                  |
 | ----------------- | ----------------------- | ---------------------- | ------------- | ----------------------- |
-| 🦀 Rust           | `rustfmt`, `cargo fmt`  | `clippy`               | -             | `cargo fix`             |
+| 🦀 Rust           | `rustfmt`               | `clippy`               | -             | `clippy --fix`          |
 | 🐍 Python         | `black`, `ruff format`  | `pylint`, `ruff check` | `mypy`        | `ruff --fix`            |
-| 🌐 JavaScript     | `prettier`, `dprint`    | `eslint`               | -             | `eslint --fix`          |
-| 📘 TypeScript     | `prettier`, `dprint`    | `eslint`               | `typescript`  | `eslint --fix`          |
-| 🖥️ HTML/Templates | `djlint`, `prettier`    | `htmlhint`             | -             | `djlint --reformat`     |
-| 🎨 CSS/SCSS       | `prettier`, `stylelint` | `stylelint`            | -             | `stylelint --fix`       |
-| 🐹 Go             | `gofmt`                 | `golangci-lint`        | -             | `golangci-lint --fix`   |
-| 💎 Ruby           | `rubocop`               | `rubocop`              | `sorbet`      | `rubocop -a`            |
-| 📝 Markdown       | `prettier`              | `markdownlint`         | -             | `markdownlint --fix`    |
-| 📁 TOML           | `taplo`                 | `taplo check`          | -             | -                       |
-| 📋 JSON           | `prettier`              | `jsonlint`             | -             | -                       |
-| 📄 YAML           | `prettier`              | `yamllint`             | -             | -                       |
-| 🔵 C++            | `clang-format`          | `clang-tidy`           | -             | -                       |
-| 🟢 C#             | `dotnet format`         | `roslynator`           | -             | -                       |
-| ☕ Java           | `google-java-format`    | `checkstyle`           | -             | -                       |
-| 🔶 Swift          | `swiftformat`           | `swiftlint`            | -             | `swiftlint autocorrect` |
-| 🔍 C              | `clang-format`          | `clang-tidy`           | -             | -                       |
-| 🐘 PHP            | `php-cs-fixer`          | `phpstan`              | -             | `php-cs-fixer fix`      |
-| 🐳 Docker         | -                       | `hadolint`             | -             | -                       |
-| 🔨 Makefile       | -                       | `checkmake`            | -             | -                       |
+| 🌐 JavaScript     | `prettier`              | `eslint`               | -             | `eslint --fix`          |
+| 📘 TypeScript     | `prettier`              | `eslint`               | -             | `eslint --fix`          |
+| 🖥️ HTML/Templates | `djlint`                | `djlint`               | -             | `djlint --reformat`     |
+
+### Coming Soon
+
+- 🎨 CSS/SCSS: `prettier`, `stylelint`
+- 🐹 Go: `gofmt`, `golangci-lint`
+- 💎 Ruby: `rubocop`, `sorbet`
+- 📝 Markdown: `prettier`, `markdownlint`
+- And many more...
 
 ## ⚙️ Configuration: Opinionated But Flexible
 
@@ -108,6 +104,26 @@ Siren believes in "convention over configuration" but respects your preferences.
 - **Progressive Configuration** - Add settings only when you need to customize
 - **Sensible Defaults** - We make the hard choices so you don't have to
 - **Override Anything** - But you can always do it your way
+
+### Configuration File
+
+Siren uses TOML for configuration. Place a `.siren.toml` file in your project root:
+
+```toml
+# .siren.toml example
+
+[general]
+fail_level = "error"
+use_relative_paths = true
+
+[languages.python] 
+line_length = 100
+ignore_rules = ["E203", "W503"]
+
+[tools.eslint]
+extra_args = ["--max-warnings", "10"] 
+auto_fix = true
+```
 
 ## 💎 Advanced Use Cases
 
@@ -127,10 +143,7 @@ $ siren check . "src/components/**/*.tsx" "lib/**/*.js"
 $ siren fix core/templates "**/*.html"
 
 # Chain commands for workflow efficiency
-$ siren format fix --git-modified
-
-# Analyze syntax tree for specific files (experimental)
-$ siren ast src/components/Button.tsx
+$ siren format-fix --git-modified
 ```
 
 ### For Team Leads
@@ -139,17 +152,11 @@ $ siren ast src/components/Button.tsx
 # Run comprehensive checks before a release
 $ siren check --strict
 
-# Generate a beautiful HTML report
-$ siren check --report
-
 # Integrate with CI pipeline
 $ siren check --ci --fail-level=error
 
-# Create a team config
+# Create a team config (coming soon)
 $ siren init --team
-
-# Check how much of your codebase follows best practices
-$ siren stats --quality-score
 ```
 
 ### For Newcomers
@@ -161,11 +168,8 @@ $ siren detect
 # Learn what tools are available
 $ siren list-tools
 
-# Get suggestions for improving code quality
+# Get suggestions for improving code quality (coming soon)
 $ siren suggest
-
-# Get an explanation of a specific linting rule
-$ siren explain eslint no-unused-vars
 ```
 
 ## 🔮 Integration Tips
@@ -178,7 +182,6 @@ alias lint="siren"
 alias lintfix="siren fix"
 alias format="siren format"
 alias check="siren --git-modified"
-alias prettify="siren format --style-level=high"
 ```
 
 ### Git Hooks
@@ -194,8 +197,28 @@ siren check --git-staged --fail-level=error
 # .github/workflows/quality.yml
 steps:
   - name: Check code quality
-    run: siren check --ci --report --fail-level=error
+    run: siren check --ci --fail-level=error
 ```
+
+## 🌊 Development Status
+
+Siren is currently in active development. Check the [Project Checklist](docs/CHECKLIST.md) for the current status and roadmap.
+
+The following features are implemented and working:
+- ✅ Core architecture and command structure
+- ✅ Tool registry and plugin system
+- ✅ Support for Rust, Python, and HTML tools
+- ✅ Partial support for JavaScript/TypeScript tools
+- ✅ Project detection and file collection
+- ✅ Basic configuration loading and defaults
+- ✅ Colorful terminal output
+
+Coming soon:
+- 🔄 Enhanced reporting (HTML, CI annotations)
+- 🔄 Additional language support
+- 🔄 More comprehensive documentation
+- 🔄 Configuration validation and wizards
+- 🔄 Performance optimizations
 
 ## 🤝 Contributing
 
@@ -207,7 +230,7 @@ Contributions are what make the open source community such a vibrant place! Any 
 4. Push to the branch (`git push origin feature/AwesomeFeature`)
 5. Open a Pull Request
 
-See our [Contributing Guidelines](CONTRIBUTING.md) for more information.
+Contributing guide coming soon.
 
 ## 📜 License
 
