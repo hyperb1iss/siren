@@ -2,7 +2,6 @@
 
 use globset::{Glob, GlobSetBuilder};
 use log::{debug, log_enabled, Level};
-use std::collections::{HashMap, HashSet};
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -280,41 +279,125 @@ pub fn optimize_paths_for_tools(files: &[PathBuf]) -> Vec<PathBuf> {
         return Vec::new();
     }
 
-    // First, find common parent directories for the files
-    let mut dir_files: HashMap<PathBuf, Vec<PathBuf>> = HashMap::new();
+    // First, collect all files and their parent directories
+    let mut all_dirs = std::collections::HashSet::new();
+    let mut file_by_ext = std::collections::HashMap::new();
+    let mut python_files = Vec::new();
+    let mut non_python_files = Vec::new();
 
-    // Group files by their immediate parent directory
+    // Separate Python files and non-Python files
     for file in files {
-        if let Some(parent) = file.parent() {
-            dir_files
-                .entry(parent.to_path_buf())
-                .or_default()
-                .push(file.clone());
+        if let Some(ext) = file.extension() {
+            if ext == "py" {
+                python_files.push(file.clone());
+                // Add all parent directories to the set
+                let mut current = file.clone();
+                while let Some(parent) = current.parent() {
+                    if parent != Path::new("") {
+                        all_dirs.insert(parent.to_path_buf());
+                    }
+                    current = parent.to_path_buf();
+                }
+            } else {
+                non_python_files.push(file.clone());
+                // Group non-Python files by extension
+                file_by_ext
+                    .entry(ext.to_string_lossy().to_string())
+                    .or_insert_with(Vec::new)
+                    .push(file.clone());
+            }
         } else {
-            // If no parent (e.g., root files), keep them as is
-            dir_files
-                .entry(PathBuf::from("."))
-                .or_default()
-                .push(file.clone());
+            // Files without extension
+            non_python_files.push(file.clone());
         }
     }
 
-    // Find directories where all files have the same extension
+    debug!(
+        "Found {} Python files and {} non-Python files",
+        python_files.len(),
+        non_python_files.len()
+    );
+
+    // Find Python package directories (directories with __init__.py)
+    let mut python_package_dirs = Vec::new();
+    for dir in &all_dirs {
+        if dir.join("__init__.py").exists() {
+            python_package_dirs.push(dir.clone());
+        }
+    }
+
+    debug!(
+        "Found {} directories with __init__.py",
+        python_package_dirs.len()
+    );
+
+    // Sort package directories by path length (shortest first)
+    python_package_dirs.sort_by(|a, b| a.as_os_str().len().cmp(&b.as_os_str().len()));
+
+    // Find top-level package directories (those that aren't subdirectories of other packages)
+    let mut top_level_package_dirs = Vec::new();
+    let mut handled_dirs = std::collections::HashSet::new();
+
+    for dir in python_package_dirs {
+        // Skip if this directory is already covered by a parent package
+        if handled_dirs
+            .iter()
+            .any(|parent: &PathBuf| dir.starts_with(parent) && &dir != parent)
+        {
+            debug!(
+                "Skipping subdirectory {:?} as it's covered by a parent package",
+                dir
+            );
+            continue;
+        }
+
+        debug!("Adding top-level package directory: {:?}", dir);
+        top_level_package_dirs.push(dir.clone());
+
+        // Mark this directory and all its subdirectories as handled
+        handled_dirs.insert(dir.clone());
+    }
+
+    // Create the result set
     let mut result = Vec::new();
-    let mut handled_files = HashSet::new();
+    let mut handled_files = std::collections::HashSet::new();
 
-    // Process directories with most files first (most likely to benefit from optimization)
-    let mut dirs: Vec<_> = dir_files.into_iter().collect();
-    dirs.sort_by(|a, b| b.1.len().cmp(&a.1.len()));
+    // Add top-level package directories to the result
+    for dir in top_level_package_dirs {
+        result.push(dir.clone());
 
-    for (dir, dir_files) in dirs {
+        // Mark all Python files in this directory or its subdirectories as handled
+        for file in &python_files {
+            if file.starts_with(&dir) {
+                handled_files.insert(file.clone());
+            }
+        }
+    }
+
+    // Process non-Python files by grouping them by directory when possible
+    let mut dir_files = std::collections::HashMap::new();
+    for file in &non_python_files {
+        if let Some(parent) = file.parent() {
+            dir_files
+                .entry(parent.to_path_buf())
+                .or_insert_with(Vec::new)
+                .push(file.clone());
+        } else {
+            // If no parent (e.g., root files), keep them as is
+            result.push(file.clone());
+            handled_files.insert(file.clone());
+        }
+    }
+
+    // Process directories with non-Python files
+    for (dir, files_in_dir) in dir_files {
         // Skip if all files in this directory are already handled
-        if dir_files.iter().all(|f| handled_files.contains(f)) {
+        if files_in_dir.iter().all(|f| handled_files.contains(f)) {
             continue;
         }
 
         // Get unhandled files in this directory
-        let unhandled_files: Vec<_> = dir_files
+        let unhandled_files: Vec<_> = files_in_dir
             .iter()
             .filter(|f| !handled_files.contains(*f))
             .cloned()
@@ -325,7 +408,7 @@ pub fn optimize_paths_for_tools(files: &[PathBuf]) -> Vec<PathBuf> {
         }
 
         // Check if all files have the same extension
-        let extensions: HashSet<_> = unhandled_files
+        let extensions: std::collections::HashSet<_> = unhandled_files
             .iter()
             .filter_map(|f| f.extension())
             .collect();
@@ -334,20 +417,20 @@ pub fn optimize_paths_for_tools(files: &[PathBuf]) -> Vec<PathBuf> {
         // use the directory instead
         if extensions.len() <= 1 && unhandled_files.len() > 1 {
             // Only use the directory if it's within the project (not system directories)
-            // This is a simple heuristic to avoid scanning unrelated directories
             let is_project_dir = dir.starts_with(std::env::current_dir().unwrap_or_default());
 
-            // For Python files, check if this is a valid Python package
-            let is_python_files = extensions.iter().any(|ext| *ext == "py");
-            let is_valid_package = !is_python_files || is_valid_python_package(&dir);
-
-            if is_project_dir && is_valid_package {
+            if is_project_dir {
+                debug!("Adding directory with same extension files: {:?}", dir);
                 result.push(dir);
                 for file_path in &unhandled_files {
                     handled_files.insert(file_path.clone());
                 }
             } else {
-                // Add individual files if not a project directory or not a valid Python package
+                // Add individual files if not a project directory
+                debug!(
+                    "Directory {:?} is not a project dir, adding individual files",
+                    dir
+                );
                 for file_path in &unhandled_files {
                     result.push(file_path.clone());
                     handled_files.insert(file_path.clone());
@@ -355,6 +438,10 @@ pub fn optimize_paths_for_tools(files: &[PathBuf]) -> Vec<PathBuf> {
             }
         } else {
             // Add individual files if they have different extensions
+            debug!(
+                "Directory {:?} has files with different extensions, adding individual files",
+                dir
+            );
             for file_path in &unhandled_files {
                 result.push(file_path.clone());
                 handled_files.insert(file_path.clone());
@@ -362,13 +449,15 @@ pub fn optimize_paths_for_tools(files: &[PathBuf]) -> Vec<PathBuf> {
         }
     }
 
-    // Add any remaining files that weren't handled
-    for file in files {
+    // Add any remaining Python files that weren't handled
+    for file in &python_files {
         if !handled_files.contains(file) {
+            debug!("Adding remaining unhandled Python file: {:?}", file);
             result.push(file.clone());
         }
     }
 
+    debug!("Final optimized paths count: {}", result.len());
     result
 }
 

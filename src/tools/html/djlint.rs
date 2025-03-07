@@ -54,6 +54,12 @@ impl DjLint {
                 continue;
             }
 
+            // Skip summary lines that appear at the end of output
+            // Example: "4 files would be updated.: info: files, found 14 errors. [Linted]"
+            if line.contains("files would be updated") || line.contains("[Linted]") {
+                continue;
+            }
+
             // If line doesn't start with an error code (H, T, etc), it might be a filename
             if !line.starts_with(|c: char| c.is_ascii_uppercase()) {
                 current_file = Some(PathBuf::from(line.trim()));

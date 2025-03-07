@@ -335,6 +335,18 @@ fn detect_js_tools(dir: &Path, tools: &mut Vec<DetectedTool>) {
         });
     }
 
+    // Check for eslint.config.mjs
+    let mjs_eslint_config = dir.join("eslint.config.mjs");
+    if mjs_eslint_config.exists() {
+        debug!("Detected ESLint configuration (eslint.config.mjs)");
+        tools.push(DetectedTool {
+            name: "eslint".to_string(),
+            config_path: mjs_eslint_config,
+            tool_type: ToolType::Linter,
+            language: Language::JavaScript, // Also applies to TypeScript
+        });
+    }
+
     // Check for tsconfig.json (TypeScript)
     let tsconfig = dir.join("tsconfig.json");
     if tsconfig.exists() {

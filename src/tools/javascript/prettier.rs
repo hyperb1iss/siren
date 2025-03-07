@@ -1,11 +1,12 @@
 //! Prettier formatter for JavaScript and TypeScript
 
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::time::Instant;
 
 use crate::errors::ToolError;
 use crate::models::tools::ToolConfig as ModelsToolConfig;
-use crate::models::{Language, LintIssue, LintResult, ToolInfo, ToolType};
+use crate::models::{IssueSeverity, Language, LintIssue, LintResult, ToolInfo, ToolType};
 use crate::tools::{LintTool, ToolBase};
 use crate::utils;
 
@@ -61,18 +62,81 @@ impl Prettier {
     /// Check a file for formatting issues
     fn check_file(
         &self,
-        _file_path: &Path,
-        _config: &ModelsToolConfig,
+        file_path: &Path,
+        config: &ModelsToolConfig,
     ) -> Result<Vec<LintIssue>, ToolError> {
-        // TODO: Implement check_file logic
-        // This should run prettier --check on the file
-        Ok(Vec::new())
+        let mut command = Command::new("npx");
+        command.args(["prettier", "--check"]);
+
+        // Add extra arguments
+        for arg in &config.extra_args {
+            command.arg(arg);
+        }
+
+        // Add the file to check
+        command.arg(file_path);
+
+        // Log the command
+        utils::log_command(&command);
+
+        // Run the command
+        let output = command.output().map_err(|e| ToolError::ExecutionFailed {
+            name: self.name().to_string(),
+            message: format!("Failed to execute prettier: {}", e),
+        })?;
+
+        // Get stdout and stderr
+        let _stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        let _stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+        // If the command failed, it means formatting issues were found
+        if !output.status.success() {
+            Ok(vec![LintIssue {
+                severity: IssueSeverity::Style,
+                message: "File needs formatting".to_string(),
+                file: Some(file_path.to_path_buf()),
+                line: None,
+                column: None,
+                code: None,
+                fix_available: true,
+            }])
+        } else {
+            Ok(Vec::new())
+        }
     }
 
     /// Fix formatting issues in a file
-    fn fix_file(&self, _file_path: &Path, _config: &ModelsToolConfig) -> Result<(), ToolError> {
-        // TODO: Implement fix_file logic
-        // This should run prettier --write on the file
+    fn fix_file(&self, file_path: &Path, config: &ModelsToolConfig) -> Result<(), ToolError> {
+        let mut command = Command::new("npx");
+        command.args(["prettier", "--write"]);
+
+        // Add extra arguments
+        for arg in &config.extra_args {
+            command.arg(arg);
+        }
+
+        // Add the file to fix
+        command.arg(file_path);
+
+        // Log the command
+        utils::log_command(&command);
+
+        // Run the command
+        let output = command.output().map_err(|e| ToolError::ExecutionFailed {
+            name: self.name().to_string(),
+            message: format!("Failed to execute prettier: {}", e),
+        })?;
+
+        // Check if the command succeeded
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+            return Err(ToolError::ToolFailed {
+                name: self.name().to_string(),
+                code: output.status.code().unwrap_or(1),
+                message: stderr,
+            });
+        }
+
         Ok(())
     }
 }
@@ -152,10 +216,41 @@ impl LintTool for Prettier {
     }
 
     fn is_available(&self) -> bool {
-        utils::is_command_available("prettier")
+        // Check if npx is available first
+        if !utils::command_exists("npx") {
+            return false;
+        }
+
+        // Try running prettier --version through npx
+        let mut command = Command::new("npx");
+        command.args(["prettier", "--version"]);
+
+        // Log the command
+        utils::log_command(&command);
+
+        command
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
     }
 
     fn version(&self) -> Option<String> {
-        utils::get_command_version("prettier", &["--version"])
+        // Run prettier --version through npx
+        let mut command = Command::new("npx");
+        command.args(["prettier", "--version"]);
+
+        // Log the command
+        utils::log_command(&command);
+
+        let output = command.output().ok()?;
+
+        if output.status.success() {
+            // Parse the version from output
+            let version = String::from_utf8_lossy(&output.stdout).to_string();
+            let version = version.trim();
+            Some(version.to_string())
+        } else {
+            None
+        }
     }
 }

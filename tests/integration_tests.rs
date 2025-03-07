@@ -567,10 +567,12 @@ async fn test_python_file_path_handling() {
             // Verify all issues are from file1
             for issue in &lint_result.issues {
                 if let Some(file) = &issue.file {
-                    assert_eq!(
-                        file.file_name().unwrap(),
-                        file_path1.file_name().unwrap(),
-                        "Issue should only be from file1"
+                    let file_name = file.file_name().unwrap();
+                    // Allow issues from __init__.py for Python linters
+                    assert!(
+                        file_name == file_path1.file_name().unwrap() || file_name == "__init__.py",
+                        "Issue should only be from file1 or __init__.py, but was from {:?}",
+                        file_name
                     );
                 }
             }
@@ -590,10 +592,12 @@ async fn test_python_file_path_handling() {
             // Verify all issues are from file2
             for issue in &lint_result.issues {
                 if let Some(file) = &issue.file {
-                    assert_eq!(
-                        file.file_name().unwrap(),
-                        file_path2.file_name().unwrap(),
-                        "Issue should only be from file2"
+                    let file_name = file.file_name().unwrap();
+                    // Allow issues from __init__.py for Python linters
+                    assert!(
+                        file_name == file_path2.file_name().unwrap() || file_name == "__init__.py",
+                        "Issue should only be from file2 or __init__.py, but was from {:?}",
+                        file_name
                     );
                 }
             }

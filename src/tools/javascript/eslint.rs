@@ -1,11 +1,12 @@
 //! ESLint linter for JavaScript and TypeScript
 
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::time::Instant;
 
 use crate::errors::ToolError;
 use crate::models::tools::ToolConfig as ModelsToolConfig;
-use crate::models::{Language, LintIssue, LintResult, ToolInfo, ToolType};
+use crate::models::{IssueSeverity, Language, LintIssue, LintResult, ToolInfo, ToolType};
 use crate::tools::{LintTool, ToolBase};
 use crate::utils;
 
@@ -28,7 +29,7 @@ impl ESLint {
                 name: "eslint".to_string(),
                 description: "Pluggable linting utility for JavaScript and TypeScript".to_string(),
                 tool_type: ToolType::Linter,
-                language: Language::JavaScript, // Also handles TypeScript
+                language: Language::TypeScript, // Change to TypeScript since it handles both
             },
         }
     }
@@ -37,7 +38,7 @@ impl ESLint {
     fn check_files(
         &self,
         files: &[PathBuf],
-        _config: &ModelsToolConfig,
+        config: &ModelsToolConfig,
     ) -> Result<(Vec<LintIssue>, String, String), ToolError> {
         // Skip if no files can be handled
         let files_to_check: Vec<&Path> = files
@@ -50,10 +51,92 @@ impl ESLint {
             return Ok((Vec::new(), String::new(), String::new()));
         }
 
-        // TODO: Implement ESLint execution
-        // This should run eslint --format=json on the files
+        let mut command = Command::new("npx");
+        command.args(["eslint", "--format=json"]);
 
-        Ok((Vec::new(), String::new(), String::new()))
+        // Add config file if specified
+        if let Some(config_file) = &config.executable_path {
+            command.args(["--config", config_file]);
+        }
+
+        // Add extra arguments
+        for arg in &config.extra_args {
+            command.arg(arg);
+        }
+
+        // Add all files to check
+        for file in files_to_check {
+            command.arg(file);
+        }
+
+        // Log the command
+        utils::log_command(&command);
+
+        // Run the command
+        let output = command.output().map_err(|e| ToolError::ExecutionFailed {
+            name: self.name().to_string(),
+            message: format!("Failed to execute eslint: {}", e),
+        })?;
+
+        // Get stdout and stderr
+        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+        // Parse JSON output to get issues
+        let mut issues = Vec::new();
+        if !stdout.is_empty() {
+            if let Ok(json_output) = serde_json::from_str::<serde_json::Value>(&stdout) {
+                if let Some(files) = json_output.as_array() {
+                    for file in files {
+                        if let Some(messages) = file.get("messages").and_then(|m| m.as_array()) {
+                            for message in messages {
+                                let severity =
+                                    match message.get("severity").and_then(|s| s.as_u64()) {
+                                        Some(2) => IssueSeverity::Error,
+                                        Some(1) => IssueSeverity::Warning,
+                                        _ => IssueSeverity::Info,
+                                    };
+
+                                let message_text = message
+                                    .get("message")
+                                    .and_then(|m| m.as_str())
+                                    .unwrap_or("Unknown issue")
+                                    .to_string();
+
+                                let file_path = file
+                                    .get("filePath")
+                                    .and_then(|f| f.as_str())
+                                    .map(PathBuf::from);
+
+                                let line = message
+                                    .get("line")
+                                    .and_then(|l| l.as_u64())
+                                    .map(|l| l as usize);
+
+                                let column = message
+                                    .get("column")
+                                    .and_then(|c| c.as_u64())
+                                    .map(|c| c as usize);
+
+                                let rule_id = message.get("ruleId").and_then(|r| r.as_str());
+
+                                issues.push(LintIssue {
+                                    severity,
+                                    message: message_text,
+                                    file: file_path,
+                                    line,
+                                    column,
+                                    code: rule_id.map(String::from),
+                                    fix_available: message.get("fix").is_some(),
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok((issues, stdout, stderr))
     }
 
     /// Fix issues in multiple files
@@ -83,7 +166,7 @@ impl LintTool for ESLint {
 
     fn can_handle(&self, file_path: &Path) -> bool {
         if let Some(ext) = file_path.extension().and_then(|e| e.to_str()) {
-            matches!(ext, "js" | "jsx" | "ts" | "tsx" | "mjs" | "cjs")
+            matches!(ext, "js" | "jsx" | "mjs" | "cjs" | "ts" | "tsx")
         } else {
             false
         }
@@ -157,7 +240,7 @@ impl LintTool for ESLint {
     }
 
     fn language(&self) -> Language {
-        self.base.language
+        Language::TypeScript // Change to TypeScript since it handles both
     }
 
     fn description(&self) -> &str {
@@ -165,10 +248,41 @@ impl LintTool for ESLint {
     }
 
     fn is_available(&self) -> bool {
-        utils::is_command_available("eslint")
+        // Check if npx is available first
+        if !utils::command_exists("npx") {
+            return false;
+        }
+
+        // Try running eslint --version through npx
+        let mut command = Command::new("npx");
+        command.args(["eslint", "--version"]);
+
+        // Log the command
+        utils::log_command(&command);
+
+        command
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
     }
 
     fn version(&self) -> Option<String> {
-        utils::get_command_version("eslint", &["--version"])
+        // Run eslint --version through npx
+        let mut command = Command::new("npx");
+        command.args(["eslint", "--version"]);
+
+        // Log the command
+        utils::log_command(&command);
+
+        let output = command.output().ok()?;
+
+        if output.status.success() {
+            // Parse the version from output
+            let version = String::from_utf8_lossy(&output.stdout).to_string();
+            let version = version.trim();
+            Some(version.to_string())
+        } else {
+            None
+        }
     }
 }
