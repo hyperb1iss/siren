@@ -322,8 +322,7 @@ impl ClippyFixer {
         Self {
             base: ToolBase {
                 name: "clippy-fix".to_string(),
-                description:
-                    "Automatic fixer for Clippy lints".to_string(),
+                description: "Automatic fixer for Clippy lints".to_string(),
                 tool_type: ToolType::Fixer,
                 languages: vec![Language::Rust],
             },

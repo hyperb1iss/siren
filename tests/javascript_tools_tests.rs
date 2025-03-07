@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use siren::models::{Language, ToolType};
-use siren::tools::javascript::{ESLint, Prettier, TypeScript};
+use siren::tools::javascript::{ESLint, Prettier};
 use siren::tools::DefaultToolRegistry;
 use siren::tools::{LintTool, ToolRegistry};
 
@@ -53,33 +53,12 @@ fn test_eslint_can_handle() {
 }
 
 #[test]
-fn test_typescript_can_handle() {
-    let typescript = TypeScript::new();
-
-    // Should handle TypeScript files
-    assert!(typescript.can_handle(&PathBuf::from("test.ts")));
-    assert!(typescript.can_handle(&PathBuf::from("test.tsx")));
-
-    // Should not handle JavaScript files (TypeScript only checks .ts/.tsx)
-    assert!(!typescript.can_handle(&PathBuf::from("test.js")));
-    assert!(!typescript.can_handle(&PathBuf::from("test.jsx")));
-
-    // Should not handle other files
-    assert!(!typescript.can_handle(&PathBuf::from("test.json")));
-    assert!(!typescript.can_handle(&PathBuf::from("test.css")));
-    assert!(!typescript.can_handle(&PathBuf::from("test.html")));
-    assert!(!typescript.can_handle(&PathBuf::from("test.rs")));
-    assert!(!typescript.can_handle(&PathBuf::from("test.py")));
-}
-
-#[test]
 fn test_tool_registry_with_js_tools() {
     let mut registry = DefaultToolRegistry::new();
 
     // Register JavaScript/TypeScript tools
     registry.register_tool(Arc::new(Prettier::new()));
     registry.register_tool(Arc::new(ESLint::new()));
-    registry.register_tool(Arc::new(TypeScript::new()));
 
     // Get tools for JavaScript
     let js_tools = registry.get_tools_for_language(Language::JavaScript);
@@ -87,7 +66,7 @@ fn test_tool_registry_with_js_tools() {
 
     // Get tools for TypeScript
     let ts_tools = registry.get_tools_for_language(Language::TypeScript);
-    assert_eq!(ts_tools.len(), 3); // Prettier, ESLint, and TypeScript
+    assert_eq!(ts_tools.len(), 2); // Prettier and ESLint
 
     // Get formatters
     let formatters = registry.get_tools_by_type(ToolType::Formatter);
@@ -96,10 +75,6 @@ fn test_tool_registry_with_js_tools() {
     // Get linters
     let linters = registry.get_tools_by_type(ToolType::Linter);
     assert!(linters.iter().any(|t| t.name() == "eslint"));
-
-    // Get type checkers
-    let type_checkers = registry.get_tools_by_type(ToolType::TypeChecker);
-    assert!(type_checkers.iter().any(|t| t.name() == "typescript"));
 }
 
 // Skip this test if the tools are not installed
@@ -108,7 +83,6 @@ fn test_tool_registry_with_js_tools() {
 fn test_tool_availability() {
     let prettier = Prettier::new();
     let eslint = ESLint::new();
-    let typescript = TypeScript::new();
 
     // These tests will be skipped by default since they depend on the tools being installed
     // Run with `cargo test -- --ignored` to include these tests
@@ -122,11 +96,5 @@ fn test_tool_availability() {
         println!("ESLint version: {:?}", eslint.version());
     } else {
         println!("ESLint is not available");
-    }
-
-    if typescript.is_available() {
-        println!("TypeScript version: {:?}", typescript.version());
-    } else {
-        println!("TypeScript is not available");
     }
 }

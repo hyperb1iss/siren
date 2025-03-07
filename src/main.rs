@@ -376,7 +376,7 @@ async fn main() -> Result<(), SirenError> {
                         } else {
                             "Unknown".to_string()
                         };
-                        
+
                         by_language
                             .entry(lang_key)
                             .or_insert_with(Vec::new)

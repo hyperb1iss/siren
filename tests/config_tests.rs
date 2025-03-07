@@ -126,10 +126,7 @@ fn test_load_toml_config() {
         Some(vec!["--edition".to_string(), "2021".to_string()])
     );
 
-    let black_config = config
-        .tools
-        .get("black")
-        .expect("black config not found");
+    let black_config = config.tools.get("black").expect("black config not found");
     assert!(black_config.enabled);
     assert_eq!(
         black_config.extra_args,

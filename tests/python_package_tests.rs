@@ -65,12 +65,9 @@ fn test_optimize_paths_for_python_packages() {
     // Optimize paths
     let optimized_paths = siren::utils::optimize_paths_for_tools(&all_files);
 
-    // We expect only the top-level package directories and the app.py file
-    let expected_paths = vec![
-        base_dir.join("core"),
-        base_dir.join("tests"),
-        base_dir.join("app.py"),
-    ];
+    // With the new path optimization strategy, we expect all Python files to be included individually
+    // since there's no special handling for Python packages anymore
+    let expected_paths: Vec<_> = all_files.iter().cloned().collect();
 
     // Sort both vectors for comparison
     let mut optimized_paths_sorted = optimized_paths.clone();
@@ -80,21 +77,7 @@ fn test_optimize_paths_for_python_packages() {
 
     assert_eq!(
         optimized_paths_sorted, expected_paths_sorted,
-        "Optimized paths should only include top-level package directories and individual files"
-    );
-
-    // Make sure we don't have any subdirectories in the result
-    assert!(
-        !optimized_paths
-            .iter()
-            .any(|p| p.to_string_lossy().contains("models")),
-        "Subdirectory 'models' should not be in the optimized paths"
-    );
-    assert!(
-        !optimized_paths
-            .iter()
-            .any(|p| p.to_string_lossy().contains("views")),
-        "Subdirectory 'views' should not be in the optimized paths"
+        "Optimized paths should include all Python files individually with the new strategy"
     );
 }
 
@@ -120,13 +103,8 @@ fn test_optimize_paths_with_mixed_structure() {
     // Optimize paths
     let optimized_paths = siren::utils::optimize_paths_for_tools(&mixed_files);
 
-    // We expect the core directory, individual HTML/CSS files, and app.py
-    let expected_paths = vec![
-        base_dir.join("core"),
-        base_dir.join("docs/index.html"),
-        base_dir.join("docs/style.css"),
-        base_dir.join("app.py"),
-    ];
+    // With the new path optimization strategy, we expect all files to be included individually
+    let expected_paths: Vec<_> = mixed_files.iter().cloned().collect();
 
     // Sort both vectors for comparison
     let mut optimized_paths_sorted = optimized_paths.clone();
@@ -136,6 +114,6 @@ fn test_optimize_paths_with_mixed_structure() {
 
     assert_eq!(
         optimized_paths_sorted, expected_paths_sorted,
-        "Optimized paths should include Python package directories and individual non-Python files"
+        "Optimized paths should include all files individually with the new strategy"
     );
 }

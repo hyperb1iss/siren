@@ -170,7 +170,6 @@ impl DefaultToolRegistry {
         // Register JavaScript tools
         registry.register_tool(Arc::new(javascript::Prettier::new()));
         registry.register_tool(Arc::new(javascript::ESLint::new()));
-        registry.register_tool(Arc::new(javascript::TypeScript::new()));
 
         registry
     }

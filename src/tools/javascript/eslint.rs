@@ -41,13 +41,37 @@ impl ESLint {
         config: &ModelsToolConfig,
     ) -> Result<(Vec<LintIssue>, String, String), ToolError> {
         // Skip if no files can be handled
-        let files_to_check: Vec<&Path> = files
+        let files_to_check: Vec<PathBuf> = files
             .iter()
             .filter(|file| self.can_handle(file))
-            .map(|file| file.as_path())
+            .cloned()
             .collect();
 
         if files_to_check.is_empty() {
+            return Ok((Vec::new(), String::new(), String::new()));
+        }
+
+        // Use the more generic path optimizer that collapses to top-level directories
+        let optimized_paths = utils::optimize_paths_for_tools(&files_to_check);
+
+        // Filter out problematic directories that might contain build artifacts
+        let filtered_paths: Vec<PathBuf> = optimized_paths
+            .into_iter()
+            .filter(|path| {
+                // Skip directories that are likely to contain build artifacts or node_modules
+                if path.is_dir() {
+                    let path_str = path.to_string_lossy();
+                    !path_str.contains("/.next/")
+                        && !path_str.contains("/node_modules/")
+                        && !path_str.contains("/dist/")
+                        && !path_str.contains("/build/")
+                } else {
+                    true
+                }
+            })
+            .collect();
+
+        if filtered_paths.is_empty() {
             return Ok((Vec::new(), String::new(), String::new()));
         }
 
@@ -59,14 +83,20 @@ impl ESLint {
             command.args(["--config", config_file]);
         }
 
+        // Add ignore patterns for build artifacts
+        command.args(["--ignore-pattern", "**/.next/**"]);
+        command.args(["--ignore-pattern", "**/node_modules/**"]);
+        command.args(["--ignore-pattern", "**/dist/**"]);
+        command.args(["--ignore-pattern", "**/build/**"]);
+
         // Add extra arguments
         for arg in &config.extra_args {
             command.arg(arg);
         }
 
-        // Add all files to check
-        for file in files_to_check {
-            command.arg(file);
+        // Add all valid paths to check
+        for path in &filtered_paths {
+            command.arg(path);
         }
 
         // Log the command
@@ -142,18 +172,70 @@ impl ESLint {
     /// Fix issues in multiple files
     fn fix_files(&self, files: &[PathBuf], _config: &ModelsToolConfig) -> Result<(), ToolError> {
         // Skip if no files can be handled
-        let files_to_fix: Vec<&Path> = files
+        let files_to_fix: Vec<PathBuf> = files
             .iter()
             .filter(|file| self.can_handle(file))
-            .map(|file| file.as_path())
+            .cloned()
             .collect();
 
         if files_to_fix.is_empty() {
             return Ok(());
         }
 
-        // TODO: Implement ESLint fix execution
-        // This should run eslint --fix on the files
+        // Use the more generic path optimizer that collapses to top-level directories
+        let optimized_paths = utils::optimize_paths_for_tools(&files_to_fix);
+
+        // Filter out problematic directories that might contain build artifacts
+        let filtered_paths: Vec<PathBuf> = optimized_paths
+            .into_iter()
+            .filter(|path| {
+                // Skip directories that are likely to contain build artifacts or node_modules
+                if path.is_dir() {
+                    let path_str = path.to_string_lossy();
+                    !path_str.contains("/.next/")
+                        && !path_str.contains("/node_modules/")
+                        && !path_str.contains("/dist/")
+                        && !path_str.contains("/build/")
+                } else {
+                    true
+                }
+            })
+            .collect();
+
+        if filtered_paths.is_empty() {
+            return Ok(());
+        }
+
+        let mut command = Command::new("npx");
+        command.args(["eslint", "--fix"]);
+
+        // Add ignore patterns for build artifacts
+        command.args(["--ignore-pattern", "**/.next/**"]);
+        command.args(["--ignore-pattern", "**/node_modules/**"]);
+        command.args(["--ignore-pattern", "**/dist/**"]);
+        command.args(["--ignore-pattern", "**/build/**"]);
+
+        // Add all valid paths to fix
+        for path in &filtered_paths {
+            command.arg(path);
+        }
+
+        // Log the command
+        utils::log_command(&command);
+
+        // Run the command
+        let output = command.output().map_err(|e| ToolError::ExecutionFailed {
+            name: self.name().to_string(),
+            message: format!("Failed to execute eslint --fix: {}", e),
+        })?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+            return Err(ToolError::ExecutionFailed {
+                name: self.name().to_string(),
+                message: format!("ESLint fix failed: {}", stderr),
+            });
+        }
 
         Ok(())
     }

@@ -258,12 +258,24 @@ async fn test_python_formatting() {
 
 #[tokio::test]
 async fn test_typescript_linting() {
-    verify_issue_detection(vec![Language::TypeScript], "unused_variable", ToolType::Linter, 1).await;
+    verify_issue_detection(
+        vec![Language::TypeScript],
+        "unused_variable",
+        ToolType::Linter,
+        1,
+    )
+    .await;
 }
 
 #[tokio::test]
 async fn test_javascript_formatting() {
-    verify_issue_detection(vec![Language::JavaScript], "formatting", ToolType::Formatter, 1).await;
+    verify_issue_detection(
+        vec![Language::JavaScript],
+        "formatting",
+        ToolType::Formatter,
+        1,
+    )
+    .await;
 }
 
 #[tokio::test]

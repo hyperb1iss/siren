@@ -6,10 +6,10 @@ use crate::config::OutputConfig;
 use crate::models::{IssueSeverity, Language, LintIssue, LintResult, ProjectInfo, ToolType};
 use colored::Colorize;
 use log::debug;
+use std::collections::BTreeMap;
 use std::env;
 use std::path::{Path, PathBuf};
 use terminal::{language_emoji, tool_emoji};
-use std::collections::BTreeMap;
 
 /// Trait for formatting output
 pub trait OutputFormatter {
@@ -137,7 +137,11 @@ impl OutputFormatter for PrettyFormatter {
             }
 
             // Skip empty results for linters
-            if tool_type.as_ref().is_some_and(|tt| matches!(tt, ToolType::Linter)) && result.issues.is_empty() {
+            if tool_type
+                .as_ref()
+                .is_some_and(|tt| matches!(tt, ToolType::Linter))
+                && result.issues.is_empty()
+            {
                 continue;
             }
 
@@ -173,31 +177,25 @@ impl OutputFormatter for PrettyFormatter {
             };
             let tool_emoji = match tool_type.as_ref() {
                 Some(tt) => self.get_tool_emoji(tt),
-                None => "🔧" // Default emoji for unknown tool type
+                None => "🔧", // Default emoji for unknown tool type
             };
 
             // For formatters, if all issues are our special "File formatted" issues, show success
             let tool_status = match tool_type.as_ref() {
                 Some(tt) => match tt {
-                    ToolType::Formatter if result
-                        .issues
-                        .iter()
-                        .all(|i| i.message == "File formatted successfully") => {
+                    ToolType::Formatter
+                        if result
+                            .issues
+                            .iter()
+                            .all(|i| i.message == "File formatted successfully") =>
+                    {
                         "✨ Success".bright_green()
                     }
-                    _ if result.issues.is_empty() => {
-                        "0 issues".to_string().bright_green()
-                    }
-                    _ => {
-                        format!("{} issues", result.issues.len()).bright_yellow()
-                    }
+                    _ if result.issues.is_empty() => "0 issues".to_string().bright_green(),
+                    _ => format!("{} issues", result.issues.len()).bright_yellow(),
                 },
-                None if result.issues.is_empty() => {
-                    "0 issues".to_string().bright_green()
-                },
-                None => {
-                    format!("{} issues", result.issues.len()).bright_yellow()
-                }
+                None if result.issues.is_empty() => "0 issues".to_string().bright_green(),
+                None => format!("{} issues", result.issues.len()).bright_yellow(),
             };
 
             // Format the header with tool info - enhanced neon style
@@ -236,7 +234,9 @@ impl OutputFormatter for PrettyFormatter {
             }
 
             // For formatters with only "File formatted" info issues, show a special message
-            if tool_type.as_ref().is_some_and(|tt| matches!(tt, ToolType::Formatter))
+            if tool_type
+                .as_ref()
+                .is_some_and(|tt| matches!(tt, ToolType::Formatter))
                 && result
                     .issues
                     .iter()
