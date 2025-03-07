@@ -40,8 +40,8 @@ pub struct DetectedTool {
     /// Type of the tool
     pub tool_type: ToolType,
 
-    /// Language the tool is for
-    pub language: Language,
+    /// Languages the tool is for
+    pub languages: Vec<Language>,
 }
 
 /// Result from running a lint tool
@@ -130,8 +130,8 @@ pub struct ToolInfo {
     /// Tool type
     pub tool_type: ToolType,
 
-    /// Language this tool is for
-    pub language: Language,
+    /// Languages this tool is for
+    pub languages: Vec<Language>,
 
     /// Whether this tool is available on the system
     pub available: bool,

@@ -25,7 +25,7 @@ impl Ruff {
                 name: "ruff".to_string(),
                 description: "An extremely fast Python linter, written in Rust".to_string(),
                 tool_type: ToolType::Linter,
-                language: Language::Python,
+                languages: vec![Language::Python],
             },
         }
     }
@@ -256,7 +256,7 @@ impl LintTool for Ruff {
             tool: Some(ToolInfo {
                 name: self.name().to_string(),
                 tool_type: self.tool_type(),
-                language: self.language(),
+                languages: self.languages(),
                 available: self.is_available(),
                 version: self.version(),
                 description: self.description().to_string(),
@@ -281,8 +281,8 @@ impl LintTool for Ruff {
         self.base.tool_type
     }
 
-    fn language(&self) -> Language {
-        self.base.language
+    fn languages(&self) -> Vec<Language> {
+        self.base.languages.clone()
     }
 
     fn description(&self) -> &str {
@@ -311,7 +311,7 @@ impl RuffFormatter {
                 name: "ruff_formatter".to_string(),
                 description: "An extremely fast Python formatter, written in Rust".to_string(),
                 tool_type: ToolType::Formatter,
-                language: Language::Python,
+                languages: vec![Language::Python],
             },
         }
     }
@@ -489,7 +489,7 @@ impl LintTool for RuffFormatter {
             tool: Some(ToolInfo {
                 name: self.name().to_string(),
                 tool_type: self.tool_type(),
-                language: self.language(),
+                languages: self.languages(),
                 available: self.is_available(),
                 version: self.version(),
                 description: self.description().to_string(),
@@ -508,8 +508,8 @@ impl LintTool for RuffFormatter {
         self.base.tool_type
     }
 
-    fn language(&self) -> Language {
-        self.base.language
+    fn languages(&self) -> Vec<Language> {
+        self.base.languages.clone()
     }
 
     fn description(&self) -> &str {

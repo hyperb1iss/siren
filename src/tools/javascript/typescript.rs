@@ -29,7 +29,7 @@ impl TypeScript {
                 name: "typescript".to_string(),
                 description: "TypeScript type checker".to_string(),
                 tool_type: ToolType::TypeChecker,
-                language: Language::TypeScript,
+                languages: vec![Language::TypeScript],
             },
         }
     }
@@ -87,13 +87,16 @@ impl TypeScript {
 
         // Parse TypeScript error output
         let mut issues = Vec::new();
+        // Compile regex once before the loop
+        let ts_error_regex = regex::Regex::new(r"^(.+?)\((\d+),(\d+)\): (error|warning) TS(\d+): (.+)$")
+            .map_err(|e| ToolError::ExecutionFailed {
+                name: self.name().to_string(),
+                message: format!("Failed to compile regex: {}", e),
+            })?;
+            
         for line in stderr.lines() {
             // TypeScript error format: file(line,col): error TS2345: message
-            if let Some(captures) =
-                regex::Regex::new(r"^(.+?)\((\d+),(\d+)\): (error|warning) TS(\d+): (.+)$")
-                    .ok()
-                    .and_then(|re| re.captures(line))
-            {
+            if let Some(captures) = ts_error_regex.captures(line) {
                 let file_path = PathBuf::from(captures.get(1).unwrap().as_str());
                 let line_num = captures
                     .get(2)
@@ -163,7 +166,7 @@ impl LintTool for TypeScript {
             tool: Some(ToolInfo {
                 name: self.name().to_string(),
                 tool_type: self.tool_type(),
-                language: self.language(),
+                languages: self.languages(),
                 available: self.is_available(),
                 version: self.version(),
                 description: self.description().to_string(),
@@ -188,8 +191,8 @@ impl LintTool for TypeScript {
         self.base.tool_type
     }
 
-    fn language(&self) -> Language {
-        self.base.language
+    fn languages(&self) -> Vec<Language> {
+        self.base.languages.clone()
     }
 
     fn description(&self) -> &str {

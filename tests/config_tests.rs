@@ -57,9 +57,17 @@ fn test_load_toml_config() {
     line_length = 100
     ignore_rules = ["unused_variables", "dead_code"]
     
+    [languages.Python]
+    line_length = 88
+    ignore_rules = ["E501", "F401"]
+    
     [tools.rustfmt]
     enabled = true
     extra_args = ["--edition", "2021"]
+    
+    [tools.black]
+    enabled = true
+    extra_args = ["--line-length", "88"]
     
     [output]
     show_line_numbers = false
@@ -83,7 +91,7 @@ fn test_load_toml_config() {
     assert_eq!(config.style.theme, "ocean");
     assert!(!config.style.use_emoji);
 
-    // Check language config
+    // Check language configs
     let rust_config = config
         .languages
         .get(&Language::Rust)
@@ -97,7 +105,17 @@ fn test_load_toml_config() {
         ])
     );
 
-    // Check tool config
+    let python_config = config
+        .languages
+        .get(&Language::Python)
+        .expect("Python config not found");
+    assert_eq!(python_config.line_length, Some(88));
+    assert_eq!(
+        python_config.ignore_rules,
+        Some(vec!["E501".to_string(), "F401".to_string()])
+    );
+
+    // Check tool configs
     let rustfmt_config = config
         .tools
         .get("rustfmt")
@@ -106,6 +124,16 @@ fn test_load_toml_config() {
     assert_eq!(
         rustfmt_config.extra_args,
         Some(vec!["--edition".to_string(), "2021".to_string()])
+    );
+
+    let black_config = config
+        .tools
+        .get("black")
+        .expect("black config not found");
+    assert!(black_config.enabled);
+    assert_eq!(
+        black_config.extra_args,
+        Some(vec!["--line-length".to_string(), "88".to_string()])
     );
 
     // Check output config

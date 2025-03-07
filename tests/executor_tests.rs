@@ -22,7 +22,7 @@ mod test_mocks {
     /// A mock implementation of the LintTool trait for testing
     pub struct MockTool {
         name: String,
-        language: Language,
+        languages: Vec<Language>,
         tool_type: ToolType,
         description: String,
         available: bool,
@@ -33,7 +33,7 @@ mod test_mocks {
         /// Create a new mock tool
         pub fn new(
             name: &str,
-            language: Language,
+            languages: Vec<Language>,
             tool_type: ToolType,
             description: &str,
             available: bool,
@@ -41,7 +41,7 @@ mod test_mocks {
         ) -> Arc<Self> {
             Arc::new(Self {
                 name: name.to_string(),
-                language,
+                languages,
                 tool_type,
                 description: description.to_string(),
                 available,
@@ -58,13 +58,13 @@ mod test_mocks {
         fn can_handle(&self, file_path: &Path) -> bool {
             let extension = file_path.extension().and_then(|e| e.to_str()).unwrap_or("");
 
-            match self.language {
+            self.languages.iter().any(|lang| match lang {
                 Language::Rust => extension == "rs",
                 Language::Python => extension == "py",
                 Language::JavaScript => extension == "js" || extension == "jsx",
                 Language::TypeScript => extension == "ts" || extension == "tsx",
                 _ => false,
-            }
+            })
         }
 
         fn execute(
@@ -80,7 +80,7 @@ mod test_mocks {
                 tool: Some(ToolInfo {
                     name: self.name.clone(),
                     tool_type: self.tool_type,
-                    language: self.language,
+                    languages: self.languages.clone(),
                     available: self.is_available(),
                     version: self.version(),
                     description: self.description().to_string(),
@@ -105,8 +105,8 @@ mod test_mocks {
             self.tool_type
         }
 
-        fn language(&self) -> Language {
-            self.language
+        fn languages(&self) -> Vec<Language> {
+            self.languages.clone()
         }
 
         fn description(&self) -> &str {
@@ -128,7 +128,7 @@ async fn test_executor_run_tool() {
     // Create a mock tool
     let tool = MockTool::new(
         "test-tool",
-        Language::Rust,
+        vec![Language::Rust],
         ToolType::Linter,
         "Test tool for testing",
         true,
@@ -178,7 +178,7 @@ async fn test_executor_run_tools_for_language() {
     // Create mock tools
     let rust_tool1 = MockTool::new(
         "rust-tool1",
-        Language::Rust,
+        vec![Language::Rust],
         ToolType::Linter,
         "Rust tool 1",
         true,
@@ -186,7 +186,7 @@ async fn test_executor_run_tools_for_language() {
     );
     let rust_tool2 = MockTool::new(
         "rust-tool2",
-        Language::Rust,
+        vec![Language::Rust],
         ToolType::Formatter,
         "Rust tool 2",
         true,
@@ -194,7 +194,7 @@ async fn test_executor_run_tools_for_language() {
     );
     let python_tool = MockTool::new(
         "python-tool",
-        Language::Python,
+        vec![Language::Python],
         ToolType::Linter,
         "Python tool",
         true,
@@ -246,7 +246,7 @@ async fn test_executor_run_tools_for_language_and_type() {
     // Create mock tools
     let rust_linter = MockTool::new(
         "rust-linter",
-        Language::Rust,
+        vec![Language::Rust],
         ToolType::Linter,
         "Rust linter",
         true,
@@ -254,7 +254,7 @@ async fn test_executor_run_tools_for_language_and_type() {
     );
     let rust_formatter = MockTool::new(
         "rust-formatter",
-        Language::Rust,
+        vec![Language::Rust],
         ToolType::Formatter,
         "Rust formatter",
         true,
@@ -262,7 +262,7 @@ async fn test_executor_run_tools_for_language_and_type() {
     );
     let python_linter = MockTool::new(
         "python-linter",
-        Language::Python,
+        vec![Language::Python],
         ToolType::Linter,
         "Python linter",
         true,

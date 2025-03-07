@@ -23,7 +23,7 @@ impl Black {
                 name: "black".to_string(),
                 description: "The uncompromising Python code formatter".to_string(),
                 tool_type: ToolType::Formatter,
-                language: Language::Python,
+                languages: vec![Language::Python],
             },
         }
     }
@@ -71,7 +71,7 @@ impl LintTool for Black {
                 tool: Some(ToolInfo {
                     name: self.name().to_string(),
                     tool_type: self.tool_type(),
-                    language: self.language(),
+                    languages: self.languages(),
                     available: self.is_available(),
                     version: self.version(),
                     description: self.description().to_string(),
@@ -159,7 +159,7 @@ impl LintTool for Black {
             tool: Some(ToolInfo {
                 name: self.name().to_string(),
                 tool_type: self.tool_type(),
-                language: self.language(),
+                languages: self.languages(),
                 available: self.is_available(),
                 version: self.version(),
                 description: self.description().to_string(),
@@ -184,8 +184,8 @@ impl LintTool for Black {
         self.base.tool_type
     }
 
-    fn language(&self) -> Language {
-        self.base.language
+    fn languages(&self) -> Vec<Language> {
+        self.base.languages.clone()
     }
 
     fn description(&self) -> &str {

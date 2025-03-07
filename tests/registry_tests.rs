@@ -13,7 +13,7 @@ mod test_mocks {
     /// A mock implementation of the LintTool trait for testing
     pub struct MockTool {
         name: String,
-        language: Language,
+        languages: Vec<Language>,
         tool_type: ToolType,
         description: String,
         available: bool,
@@ -24,7 +24,7 @@ mod test_mocks {
         /// Create a new mock tool
         pub fn new(
             name: &str,
-            language: Language,
+            languages: Vec<Language>,
             tool_type: ToolType,
             description: &str,
             available: bool,
@@ -32,7 +32,7 @@ mod test_mocks {
         ) -> Arc<Self> {
             Arc::new(Self {
                 name: name.to_string(),
-                language,
+                languages,
                 tool_type,
                 description: description.to_string(),
                 available,
@@ -49,13 +49,13 @@ mod test_mocks {
         fn can_handle(&self, file_path: &Path) -> bool {
             let extension = file_path.extension().and_then(|e| e.to_str()).unwrap_or("");
 
-            match self.language {
+            self.languages.iter().any(|lang| match lang {
                 Language::Rust => extension == "rs",
                 Language::Python => extension == "py",
                 Language::JavaScript => extension == "js" || extension == "jsx",
                 Language::TypeScript => extension == "ts" || extension == "tsx",
                 _ => false,
-            }
+            })
         }
 
         fn execute(
@@ -69,7 +69,7 @@ mod test_mocks {
                 tool: Some(ToolInfo {
                     name: self.name.clone(),
                     tool_type: self.tool_type,
-                    language: self.language,
+                    languages: self.languages.clone(),
                     available: self.is_available(),
                     version: self.version(),
                     description: self.description().to_string(),
@@ -86,8 +86,8 @@ mod test_mocks {
             self.tool_type
         }
 
-        fn language(&self) -> Language {
-            self.language
+        fn languages(&self) -> Vec<Language> {
+            self.languages.clone()
         }
 
         fn description(&self) -> &str {
@@ -120,7 +120,7 @@ fn test_registry_can_register_tool() {
     // Create a mock tool
     let tool = MockTool::new(
         "mock_rustfmt",
-        Language::Rust,
+        vec![Language::Rust],
         ToolType::Formatter,
         "A mock Rust formatter",
         true,
@@ -140,7 +140,7 @@ fn test_registry_can_register_tool() {
     // Check that the retrieved tool has the right properties
     let retrieved_tool = retrieved_tool.unwrap();
     assert_eq!(retrieved_tool.name(), "mock_rustfmt");
-    assert_eq!(retrieved_tool.language(), Language::Rust);
+    assert_eq!(retrieved_tool.languages().len(), 1);
     assert_eq!(retrieved_tool.tool_type(), ToolType::Formatter);
 }
 
@@ -151,7 +151,7 @@ fn test_registry_get_tools_by_language() {
     // Create and register tools for different languages
     let rust_tool = MockTool::new(
         "mock_rustfmt",
-        Language::Rust,
+        vec![Language::Rust],
         ToolType::Formatter,
         "A mock Rust formatter",
         true,
@@ -160,7 +160,7 @@ fn test_registry_get_tools_by_language() {
 
     let python_tool = MockTool::new(
         "mock_black",
-        Language::Python,
+        vec![Language::Python],
         ToolType::Formatter,
         "A mock Python formatter",
         true,
@@ -191,7 +191,7 @@ fn test_registry_get_tools_by_type() {
     // Create and register tools of different types
     let formatter = MockTool::new(
         "mock_rustfmt",
-        Language::Rust,
+        vec![Language::Rust],
         ToolType::Formatter,
         "A mock Rust formatter",
         true,
@@ -200,7 +200,7 @@ fn test_registry_get_tools_by_type() {
 
     let linter = MockTool::new(
         "mock_clippy",
-        Language::Rust,
+        vec![Language::Rust],
         ToolType::Linter,
         "A mock Rust linter",
         true,
@@ -231,7 +231,7 @@ fn test_registry_get_tools_for_language_and_type() {
     // Create and register tools for different languages and types
     let rust_formatter = MockTool::new(
         "mock_rustfmt",
-        Language::Rust,
+        vec![Language::Rust],
         ToolType::Formatter,
         "A mock Rust formatter",
         true,
@@ -240,7 +240,7 @@ fn test_registry_get_tools_for_language_and_type() {
 
     let rust_linter = MockTool::new(
         "mock_clippy",
-        Language::Rust,
+        vec![Language::Rust],
         ToolType::Linter,
         "A mock Rust linter",
         true,
@@ -249,7 +249,7 @@ fn test_registry_get_tools_for_language_and_type() {
 
     let python_formatter = MockTool::new(
         "mock_black",
-        Language::Python,
+        vec![Language::Python],
         ToolType::Formatter,
         "A mock Python formatter",
         true,
@@ -258,7 +258,7 @@ fn test_registry_get_tools_for_language_and_type() {
 
     let python_linter = MockTool::new(
         "mock_mypy",
-        Language::Python,
+        vec![Language::Python],
         ToolType::Linter,
         "A mock Python linter",
         true,

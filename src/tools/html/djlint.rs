@@ -34,7 +34,7 @@ impl DjLint {
                 name: "djlint".to_string(),
                 description: "HTML template linter with support for Django, Jinja, Nunjucks, Handlebars, and more".to_string(),
                 tool_type: ToolType::Linter,
-                language: Language::Html,
+                languages: vec![Language::Html],
             },
         }
     }
@@ -154,7 +154,7 @@ impl DjLintFormatter {
                 name: "djlint-fmt".to_string(),
                 description: "HTML template formatter with support for Django, Jinja, Nunjucks, Handlebars, and more".to_string(),
                 tool_type: ToolType::Formatter,
-                language: Language::Html,
+                languages: vec![Language::Html],
             },
         }
     }
@@ -278,7 +278,7 @@ impl LintTool for DjLint {
                 tool: Some(ToolInfo {
                     name: self.name().to_string(),
                     tool_type: self.tool_type(),
-                    language: self.language(),
+                    languages: self.languages(),
                     available: self.is_available(),
                     version: self.version(),
                     description: self.description().to_string(),
@@ -312,7 +312,7 @@ impl LintTool for DjLint {
                 tool: Some(ToolInfo {
                     name: self.name().to_string(),
                     tool_type: self.tool_type(),
-                    language: self.language(),
+                    languages: self.languages(),
                     available: self.is_available(),
                     version: self.version(),
                     description: self.description().to_string(),
@@ -328,19 +328,21 @@ impl LintTool for DjLint {
         // Run djlint check on files
         let (issues, stdout, stderr) = self.check_files(&html_files, config)?;
 
+        let execution_time = start_time.elapsed();
+
         Ok(LintResult {
             tool_name: self.name().to_string(),
             tool: Some(ToolInfo {
                 name: self.name().to_string(),
                 tool_type: self.tool_type(),
-                language: self.language(),
+                languages: self.languages(),
                 available: self.is_available(),
                 version: self.version(),
                 description: self.description().to_string(),
             }),
             success: issues.is_empty(),
             issues,
-            execution_time: start_time.elapsed(),
+            execution_time,
             stdout: if stdout.is_empty() {
                 None
             } else {
@@ -358,8 +360,8 @@ impl LintTool for DjLint {
         self.base.tool_type
     }
 
-    fn language(&self) -> Language {
-        self.base.language
+    fn languages(&self) -> Vec<Language> {
+        self.base.languages.clone()
     }
 
     fn description(&self) -> &str {
@@ -403,7 +405,7 @@ impl LintTool for DjLintFormatter {
                 tool: Some(ToolInfo {
                     name: self.name().to_string(),
                     tool_type: self.tool_type(),
-                    language: self.language(),
+                    languages: self.languages(),
                     available: self.is_available(),
                     version: self.version(),
                     description: self.description().to_string(),
@@ -437,7 +439,7 @@ impl LintTool for DjLintFormatter {
                 tool: Some(ToolInfo {
                     name: self.name().to_string(),
                     tool_type: self.tool_type(),
-                    language: self.language(),
+                    languages: self.languages(),
                     available: self.is_available(),
                     version: self.version(),
                     description: self.description().to_string(),
@@ -460,7 +462,7 @@ impl LintTool for DjLintFormatter {
                 tool: Some(ToolInfo {
                     name: self.name().to_string(),
                     tool_type: self.tool_type(),
-                    language: self.language(),
+                    languages: self.languages(),
                     available: self.is_available(),
                     version: self.version(),
                     description: self.description().to_string(),
@@ -476,19 +478,23 @@ impl LintTool for DjLintFormatter {
         // Check formatting
         let issues = self.check_formatting(&html_files, config)?;
 
+        let start_time = Instant::now();
+
+        let execution_time = start_time.elapsed();
+
         Ok(LintResult {
             tool_name: self.name().to_string(),
             tool: Some(ToolInfo {
                 name: self.name().to_string(),
                 tool_type: self.tool_type(),
-                language: self.language(),
+                languages: self.languages(),
                 available: self.is_available(),
                 version: self.version(),
                 description: self.description().to_string(),
             }),
             success: issues.is_empty(),
             issues,
-            execution_time: start_time.elapsed(),
+            execution_time,
             stdout: None,
             stderr: None,
         })
@@ -498,8 +504,8 @@ impl LintTool for DjLintFormatter {
         self.base.tool_type
     }
 
-    fn language(&self) -> Language {
-        self.base.language
+    fn languages(&self) -> Vec<Language> {
+        self.base.languages.clone()
     }
 
     fn description(&self) -> &str {

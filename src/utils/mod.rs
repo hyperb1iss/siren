@@ -332,7 +332,7 @@ pub fn optimize_paths_for_tools(files: &[PathBuf]) -> Vec<PathBuf> {
     );
 
     // Sort package directories by path length (shortest first)
-    python_package_dirs.sort_by(|a, b| a.as_os_str().len().cmp(&b.as_os_str().len()));
+    python_package_dirs.sort_by_key(|a| a.as_os_str().len());
 
     // Find top-level package directories (those that aren't subdirectories of other packages)
     let mut top_level_package_dirs = Vec::new();

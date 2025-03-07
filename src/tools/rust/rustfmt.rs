@@ -23,7 +23,7 @@ impl Rustfmt {
                 name: "rustfmt".to_string(),
                 description: "The Rust code formatter".to_string(),
                 tool_type: ToolType::Formatter,
-                language: Language::Rust,
+                languages: vec![Language::Rust],
             },
         }
     }
@@ -182,7 +182,7 @@ impl LintTool for Rustfmt {
                 tool: Some(ToolInfo {
                     name: self.name().to_string(),
                     tool_type: self.tool_type(),
-                    language: self.language(),
+                    languages: self.languages(),
                     available: self.is_available(),
                     version: self.version(),
                     description: self.description().to_string(),
@@ -260,7 +260,7 @@ impl LintTool for Rustfmt {
             tool: Some(ToolInfo {
                 name: self.name().to_string(),
                 tool_type: self.tool_type(),
-                language: self.language(),
+                languages: self.languages(),
                 available: self.is_available(),
                 version: self.version(),
                 description: self.description().to_string(),
@@ -285,8 +285,8 @@ impl LintTool for Rustfmt {
         self.base.tool_type
     }
 
-    fn language(&self) -> Language {
-        self.base.language
+    fn languages(&self) -> Vec<Language> {
+        self.base.languages.clone()
     }
 
     fn description(&self) -> &str {

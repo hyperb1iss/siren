@@ -59,7 +59,7 @@ async fn main() -> Result<(), SirenError> {
             debug!(
                 "DEBUG:   - {} ({:?}) - Available: {}",
                 tool.name(),
-                tool.language(),
+                tool.languages(),
                 tool.is_available()
             );
         }
@@ -235,7 +235,7 @@ async fn main() -> Result<(), SirenError> {
                                 .map(|t| models::ToolInfo {
                                     name: t.name().to_string(),
                                     tool_type: t.tool_type(),
-                                    language: t.language(),
+                                    languages: t.languages(),
                                     available: t.is_available(),
                                     version: t.version(),
                                     description: t.description().to_string(),
@@ -249,7 +249,7 @@ async fn main() -> Result<(), SirenError> {
                                 .map(|t| models::ToolInfo {
                                     name: t.name().to_string(),
                                     tool_type: t.tool_type(),
-                                    language: t.language(),
+                                    languages: t.languages(),
                                     available: t.is_available(),
                                     version: t.version(),
                                     description: t.description().to_string(),
@@ -264,7 +264,7 @@ async fn main() -> Result<(), SirenError> {
                             .map(|t| models::ToolInfo {
                                 name: t.name().to_string(),
                                 tool_type: t.tool_type(),
-                                language: t.language(),
+                                languages: t.languages(),
                                 available: t.is_available(),
                                 version: t.version(),
                                 description: t.description().to_string(),
@@ -292,7 +292,7 @@ async fn main() -> Result<(), SirenError> {
                         .map(|t| models::ToolInfo {
                             name: t.name().to_string(),
                             tool_type: t.tool_type(),
-                            language: t.language(),
+                            languages: t.languages(),
                             available: t.is_available(),
                             version: t.version(),
                             description: t.description().to_string(),
@@ -310,7 +310,7 @@ async fn main() -> Result<(), SirenError> {
                     .map(|t| models::ToolInfo {
                         name: t.name().to_string(),
                         tool_type: t.tool_type(),
-                        language: t.language(),
+                        languages: t.languages(),
                         available: t.is_available(),
                         version: t.version(),
                         description: t.description().to_string(),
@@ -325,8 +325,8 @@ async fn main() -> Result<(), SirenError> {
                     let mut sorted_tools = filtered_tools;
                     sorted_tools.sort_by(|a, b| {
                         // First sort by language
-                        let a_lang = format!("{:?}", a.language);
-                        let b_lang = format!("{:?}", b.language);
+                        let a_lang = format!("{:?}", a.languages);
+                        let b_lang = format!("{:?}", b.languages);
 
                         // Then by name - use Ord implementation directly to avoid reference issues
                         a_lang.cmp(&b_lang).then_with(|| Ord::cmp(&a.name, &b.name))
@@ -339,7 +339,7 @@ async fn main() -> Result<(), SirenError> {
                             serde_json::json!({
                                 "name": tool.name,
                                 "tool_type": format!("{:?}", tool.tool_type),
-                                "language": format!("{:?}", tool.language),
+                                "languages": format!("{:?}", tool.languages),
                                 "available": tool.available,
                                 "version": tool.version,
                                 "description": tool.description
@@ -366,25 +366,32 @@ async fn main() -> Result<(), SirenError> {
                         println!("🧰 Available tools in Siren:");
                     }
 
-                    // Group tools by language
+                    // Convert filtered_tools to tools by language map
                     let mut by_language = std::collections::HashMap::new();
 
                     for tool in filtered_tools {
+                        // Use first language as key or "Unknown" if no languages
+                        let lang_key = if !tool.languages.is_empty() {
+                            format!("{:?}", tool.languages)
+                        } else {
+                            "Unknown".to_string()
+                        };
+                        
                         by_language
-                            .entry(tool.language)
+                            .entry(lang_key)
                             .or_insert_with(Vec::new)
                             .push(tool);
                     }
 
                     // Sort languages alphabetically for consistent output
                     let mut languages: Vec<_> = by_language.keys().collect();
-                    languages.sort_by_key(|l| format!("{:?}", l));
+                    languages.sort();
 
                     // Output tools grouped by language
-                    for &language in &languages {
-                        let tools = &by_language[language];
+                    for language in &languages {
+                        let tools = &by_language[language.as_str()];
 
-                        println!("\n📦 {:?}:", language);
+                        println!("\n📦 {}:", language);
 
                         // Sort tools by name for consistent output (alphabetically)
                         let mut sorted_tools = tools.clone();

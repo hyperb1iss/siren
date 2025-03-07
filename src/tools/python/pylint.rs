@@ -24,7 +24,7 @@ impl PyLint {
                 name: "pylint".to_string(),
                 description: "Python static code analyzer".to_string(),
                 tool_type: ToolType::Linter,
-                language: Language::Python,
+                languages: vec![Language::Python],
             },
         }
     }
@@ -185,7 +185,7 @@ impl LintTool for PyLint {
             tool: Some(ToolInfo {
                 name: self.name().to_string(),
                 tool_type: self.tool_type(),
-                language: self.language(),
+                languages: self.languages(),
                 available: self.is_available(),
                 version: self.version(),
                 description: self.description().to_string(),
@@ -210,8 +210,8 @@ impl LintTool for PyLint {
         self.base.tool_type
     }
 
-    fn language(&self) -> Language {
-        self.base.language
+    fn languages(&self) -> Vec<Language> {
+        self.base.languages.clone()
     }
 
     fn description(&self) -> &str {

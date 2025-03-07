@@ -1,7 +1,6 @@
 //! Tests for Python package path optimization
 
 use std::fs::{self, File};
-use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 
 /// Create a test directory structure with Python files and __init__.py files

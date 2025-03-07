@@ -87,7 +87,7 @@ fn test_tool_registry_with_js_tools() {
 
     // Get tools for TypeScript
     let ts_tools = registry.get_tools_for_language(Language::TypeScript);
-    assert_eq!(ts_tools.len(), 1); // TypeScript
+    assert_eq!(ts_tools.len(), 3); // Prettier, ESLint, and TypeScript
 
     // Get formatters
     let formatters = registry.get_tools_by_type(ToolType::Formatter);

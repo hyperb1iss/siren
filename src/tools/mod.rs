@@ -34,8 +34,8 @@ pub trait LintTool: Send + Sync {
     /// Get the type of tool
     fn tool_type(&self) -> ToolType;
 
-    /// Get the language this tool works with
-    fn language(&self) -> Language;
+    /// Get the languages this tool works with
+    fn languages(&self) -> Vec<Language>;
 
     /// Get a description of what this tool does
     fn description(&self) -> &str;
@@ -58,8 +58,8 @@ pub struct ToolBase {
     /// Tool type
     pub tool_type: ToolType,
 
-    /// Language this tool is for
-    pub language: Language,
+    /// Languages this tool is for
+    pub languages: Vec<Language>,
 }
 
 /// Tool information
@@ -73,9 +73,9 @@ pub struct ToolInfo {
     #[allow(dead_code)]
     pub tool_type: ToolType,
 
-    /// Language this tool is for
+    /// Languages this tool is for
     #[allow(dead_code)]
-    pub language: Language,
+    pub languages: Vec<Language>,
 
     /// Whether this tool is available on the system
     #[allow(dead_code)]
@@ -188,8 +188,8 @@ impl ToolRegistry for DefaultToolRegistry {
         // Sort tools by language and then by name for consistent output
         tools.sort_by(|a, b| {
             // First sort by language
-            let a_lang = format!("{:?}", a.language());
-            let b_lang = format!("{:?}", b.language());
+            let a_lang = format!("{:?}", a.languages());
+            let b_lang = format!("{:?}", b.languages());
 
             // Then by name
             a_lang.cmp(&b_lang).then_with(|| a.name().cmp(b.name()))
@@ -202,7 +202,7 @@ impl ToolRegistry for DefaultToolRegistry {
         let mut tools: Vec<_> = self
             .tools
             .values()
-            .filter(|tool| tool.language() == lang)
+            .filter(|tool| tool.languages().contains(&lang))
             .map(Arc::clone)
             .collect();
 
@@ -223,8 +223,8 @@ impl ToolRegistry for DefaultToolRegistry {
         // Sort tools by language and then by name for consistent output
         tools.sort_by(|a, b| {
             // First sort by language
-            let a_lang = format!("{:?}", a.language());
-            let b_lang = format!("{:?}", b.language());
+            let a_lang = format!("{:?}", a.languages());
+            let b_lang = format!("{:?}", b.languages());
 
             // Then by name
             a_lang.cmp(&b_lang).then_with(|| a.name().cmp(b.name()))
@@ -245,7 +245,7 @@ impl ToolRegistry for DefaultToolRegistry {
         let mut tools: Vec<_> = self
             .tools
             .values()
-            .filter(|tool| tool.language() == language && tool.tool_type() == tool_type)
+            .filter(|tool| tool.languages().contains(&language) && tool.tool_type() == tool_type)
             .map(Arc::clone)
             .collect();
 
@@ -262,7 +262,7 @@ impl ToolRegistry for DefaultToolRegistry {
             .map(|tool| ToolInfo {
                 name: tool.name().to_string(),
                 tool_type: tool.tool_type(),
-                language: tool.language(),
+                languages: tool.languages().clone(),
                 available: tool.is_available(),
                 version: tool.version(),
                 description: tool.description().to_string(),
@@ -272,8 +272,8 @@ impl ToolRegistry for DefaultToolRegistry {
         // Sort tools by language and then by name for consistent output
         tools.sort_by(|a, b| {
             // First sort by language
-            let a_lang = format!("{:?}", a.language);
-            let b_lang = format!("{:?}", b.language);
+            let a_lang = format!("{:?}", a.languages);
+            let b_lang = format!("{:?}", b.languages);
 
             // Then by name - use Ord implementation directly to avoid reference issues
             a_lang.cmp(&b_lang).then_with(|| Ord::cmp(&a.name, &b.name))

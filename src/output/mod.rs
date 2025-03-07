@@ -3,12 +3,13 @@
 pub mod terminal;
 
 use crate::config::OutputConfig;
-use crate::models::{IssueSeverity, Language, LintResult, ProjectInfo, ToolType};
+use crate::models::{IssueSeverity, Language, LintIssue, LintResult, ProjectInfo, ToolType};
 use colored::Colorize;
 use log::debug;
 use std::env;
 use std::path::{Path, PathBuf};
 use terminal::{language_emoji, tool_emoji};
+use std::collections::BTreeMap;
 
 /// Trait for formatting output
 pub trait OutputFormatter {
@@ -119,42 +120,84 @@ impl OutputFormatter for PrettyFormatter {
 
         // Group results by tool
         for result in results {
-            // Get tool information
-            let language = result
-                .tool
-                .as_ref()
-                .map(|t| &t.language)
-                .unwrap_or(&Language::Unknown);
-            let tool_type = result
-                .tool
-                .as_ref()
-                .map(|t| &t.tool_type)
-                .unwrap_or(&ToolType::Linter);
+            // Get tool info if available
+            let tool_info = result.tool.as_ref();
+            let tool_type = tool_info.map(|t| t.tool_type);
+            let languages = tool_info.map(|t| &t.languages);
+            let available = tool_info.map(|t| t.available).unwrap_or(false);
+            let version = tool_info.and_then(|t| t.version.as_ref());
 
-            // Skip linters with no issues (don't even show their section)
-            if *tool_type == ToolType::Linter && result.issues.is_empty() {
+            // Group issues by severity
+            let mut issues_by_severity: BTreeMap<IssueSeverity, Vec<&LintIssue>> = BTreeMap::new();
+            for issue in &result.issues {
+                issues_by_severity
+                    .entry(issue.severity)
+                    .or_default()
+                    .push(issue);
+            }
+
+            // Skip empty results for linters
+            if tool_type.as_ref().is_some_and(|tt| matches!(tt, ToolType::Linter)) && result.issues.is_empty() {
                 continue;
             }
 
-            let version = result
-                .tool
-                .as_ref()
-                .and_then(|t| t.version.as_ref())
-                .map_or_else(|| "unknown version".to_string(), |v| v.clone());
+            // Format tool info
+            let mut tool_info_str = String::new();
+            if let Some(tt) = tool_type.as_ref() {
+                tool_info_str.push_str(&format!(" ({:?})", tt));
+            }
+            if let Some(languages) = languages {
+                let language_str = if languages.len() == 1 {
+                    format!("{:?}", languages[0])
+                } else {
+                    format!("{:?}", languages)
+                };
+                tool_info_str.push_str(&format!(" for {}", language_str));
+            }
+            if let Some(version) = version {
+                tool_info_str.push_str(&format!(" v{}", version));
+            }
+            if !available {
+                tool_info_str.push_str(" [not available]");
+            }
 
             // Add tool header with emoji, name, and version
-            let language_emoji = self.get_language_emoji(language);
-            let tool_emoji = self.get_tool_emoji(tool_type);
+            let language_emoji = if let Some(languages) = languages {
+                if languages.len() == 1 {
+                    self.get_language_emoji(&languages[0])
+                } else {
+                    "🔧" // Use a generic tool emoji for multi-language tools
+                }
+            } else {
+                "📄" // Default emoji for unknown language
+            };
+            let tool_emoji = match tool_type.as_ref() {
+                Some(tt) => self.get_tool_emoji(tt),
+                None => "🔧" // Default emoji for unknown tool type
+            };
 
             // For formatters, if all issues are our special "File formatted" issues, show success
-            let tool_status = if result.issues.is_empty()
-                || (*tool_type == ToolType::Formatter
-                    && result.issues.iter().all(|i| {
-                        i.severity == IssueSeverity::Info && i.message == "File formatted"
-                    })) {
-                "✓".green()
-            } else {
-                "⚠️".yellow()
+            let tool_status = match tool_type.as_ref() {
+                Some(tt) => match tt {
+                    ToolType::Formatter if result
+                        .issues
+                        .iter()
+                        .all(|i| i.message == "File formatted successfully") => {
+                        "✨ Success".bright_green()
+                    }
+                    _ if result.issues.is_empty() => {
+                        "0 issues".to_string().bright_green()
+                    }
+                    _ => {
+                        format!("{} issues", result.issues.len()).bright_yellow()
+                    }
+                },
+                None if result.issues.is_empty() => {
+                    "0 issues".to_string().bright_green()
+                },
+                None => {
+                    format!("{} issues", result.issues.len()).bright_yellow()
+                }
             };
 
             // Format the header with tool info - enhanced neon style
@@ -167,7 +210,7 @@ impl OutputFormatter for PrettyFormatter {
                 tool_emoji,
                 result.tool_name.bright_magenta().bold(),
                 tool_status,
-                version.bright_blue().dimmed(),
+                tool_info_str.bright_blue().dimmed(),
             ));
 
             // Add a subtle separator under the tool name
@@ -175,8 +218,8 @@ impl OutputFormatter for PrettyFormatter {
 
             // If no issues, add a success message
             if result.issues.is_empty() {
-                match tool_type {
-                    ToolType::Formatter => {
+                match tool_type.as_ref() {
+                    Some(ToolType::Formatter) => {
                         output.push_str(&format!(
                             "\n  {}\n",
                             "Code beautifully formatted! ✨".bright_green().bold()
@@ -193,7 +236,7 @@ impl OutputFormatter for PrettyFormatter {
             }
 
             // For formatters with only "File formatted" info issues, show a special message
-            if *tool_type == ToolType::Formatter
+            if tool_type.as_ref().is_some_and(|tt| matches!(tt, ToolType::Formatter))
                 && result
                     .issues
                     .iter()

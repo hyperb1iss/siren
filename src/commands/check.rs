@@ -194,10 +194,15 @@ where
             let config_key = format!("{:?}", config_for_runner);
 
             // Create a status for this tool
-            let language = format!("{:?}", linter.language());
+            let languages = linter.languages();
+            let language_str = if languages.len() == 1 {
+                format!("{:?}", languages[0])
+            } else {
+                format!("{:?}", languages)
+            };
             let tool_type = format!("{:?}", linter.tool_type());
             let spinner_index =
-                status_display.add_tool_status(linter.name(), &language, &tool_type);
+                status_display.add_tool_status(linter.name(), &language_str, &tool_type);
 
             // Execute the tool - without logging the execution details unless in verbose mode
             if self.verbosity >= Verbosity::Verbose {

@@ -29,7 +29,7 @@ impl ESLint {
                 name: "eslint".to_string(),
                 description: "Pluggable linting utility for JavaScript and TypeScript".to_string(),
                 tool_type: ToolType::Linter,
-                language: Language::TypeScript, // Change to TypeScript since it handles both
+                languages: vec![Language::JavaScript, Language::TypeScript],
             },
         }
     }
@@ -191,7 +191,7 @@ impl LintTool for ESLint {
                 tool: Some(ToolInfo {
                     name: self.name().to_string(),
                     tool_type: self.tool_type(),
-                    language: self.language(),
+                    languages: self.languages(),
                     available: self.is_available(),
                     version: self.version(),
                     description: self.description().to_string(),
@@ -214,7 +214,7 @@ impl LintTool for ESLint {
             tool: Some(ToolInfo {
                 name: self.name().to_string(),
                 tool_type: self.tool_type(),
-                language: self.language(),
+                languages: self.languages(),
                 available: self.is_available(),
                 version: self.version(),
                 description: self.description().to_string(),
@@ -239,8 +239,8 @@ impl LintTool for ESLint {
         self.base.tool_type
     }
 
-    fn language(&self) -> Language {
-        Language::TypeScript // Change to TypeScript since it handles both
+    fn languages(&self) -> Vec<Language> {
+        self.base.languages.clone()
     }
 
     fn description(&self) -> &str {

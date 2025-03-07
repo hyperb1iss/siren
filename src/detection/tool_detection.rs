@@ -152,7 +152,7 @@ fn detect_rust_tools(dir: &Path, tools: &mut Vec<DetectedTool>) {
             name: "rustfmt".to_string(),
             config_path: rustfmt_config,
             tool_type: ToolType::Formatter,
-            language: Language::Rust,
+            languages: vec![Language::Rust],
         });
     }
 
@@ -164,7 +164,7 @@ fn detect_rust_tools(dir: &Path, tools: &mut Vec<DetectedTool>) {
             name: "rustfmt".to_string(),
             config_path: alt_rustfmt_config,
             tool_type: ToolType::Formatter,
-            language: Language::Rust,
+            languages: vec![Language::Rust],
         });
     }
 
@@ -176,7 +176,7 @@ fn detect_rust_tools(dir: &Path, tools: &mut Vec<DetectedTool>) {
             name: "clippy".to_string(),
             config_path: clippy_config,
             tool_type: ToolType::Linter,
-            language: Language::Rust,
+            languages: vec![Language::Rust],
         });
     }
 
@@ -188,7 +188,7 @@ fn detect_rust_tools(dir: &Path, tools: &mut Vec<DetectedTool>) {
             name: "clippy".to_string(),
             config_path: alt_clippy_config,
             tool_type: ToolType::Linter,
-            language: Language::Rust,
+            languages: vec![Language::Rust],
         });
     }
 }
@@ -205,7 +205,7 @@ fn detect_python_tools(dir: &Path, tools: &mut Vec<DetectedTool>) {
             name: "black".to_string(),
             config_path: pyproject_toml.clone(),
             tool_type: ToolType::Formatter,
-            language: Language::Python,
+            languages: vec![Language::Python],
         });
 
         // Check for Ruff in pyproject.toml
@@ -214,7 +214,7 @@ fn detect_python_tools(dir: &Path, tools: &mut Vec<DetectedTool>) {
             name: "ruff".to_string(),
             config_path: pyproject_toml.clone(),
             tool_type: ToolType::Linter,
-            language: Language::Python,
+            languages: vec![Language::Python],
         });
     }
 
@@ -226,7 +226,7 @@ fn detect_python_tools(dir: &Path, tools: &mut Vec<DetectedTool>) {
             name: "pylint".to_string(),
             config_path: pylintrc,
             tool_type: ToolType::Linter,
-            language: Language::Python,
+            languages: vec![Language::Python],
         });
     }
 
@@ -238,7 +238,7 @@ fn detect_python_tools(dir: &Path, tools: &mut Vec<DetectedTool>) {
             name: "pylint".to_string(),
             config_path: alt_pylintrc,
             tool_type: ToolType::Linter,
-            language: Language::Python,
+            languages: vec![Language::Python],
         });
     }
 
@@ -250,7 +250,7 @@ fn detect_python_tools(dir: &Path, tools: &mut Vec<DetectedTool>) {
             name: "mypy".to_string(),
             config_path: mypy_ini,
             tool_type: ToolType::Linter,
-            language: Language::Python,
+            languages: vec![Language::Python],
         });
     }
 
@@ -262,7 +262,7 @@ fn detect_python_tools(dir: &Path, tools: &mut Vec<DetectedTool>) {
             name: "mypy".to_string(),
             config_path: alt_mypy_ini,
             tool_type: ToolType::Linter,
-            language: Language::Python,
+            languages: vec![Language::Python],
         });
     }
 
@@ -274,7 +274,7 @@ fn detect_python_tools(dir: &Path, tools: &mut Vec<DetectedTool>) {
             name: "ruff".to_string(),
             config_path: ruff_toml,
             tool_type: ToolType::Linter,
-            language: Language::Python,
+            languages: vec![Language::Python],
         });
     }
 }
@@ -290,7 +290,7 @@ fn detect_js_tools(dir: &Path, tools: &mut Vec<DetectedTool>) {
                 name: "prettier".to_string(),
                 config_path: prettier_config,
                 tool_type: ToolType::Formatter,
-                language: Language::JavaScript, // Also applies to TypeScript
+                languages: vec![Language::JavaScript, Language::TypeScript],
             });
             break; // Only need to detect one prettier config
         }
@@ -304,7 +304,7 @@ fn detect_js_tools(dir: &Path, tools: &mut Vec<DetectedTool>) {
             name: "prettier".to_string(),
             config_path: alt_prettier_config,
             tool_type: ToolType::Formatter,
-            language: Language::JavaScript, // Also applies to TypeScript
+            languages: vec![Language::JavaScript, Language::TypeScript],
         });
     }
 
@@ -317,7 +317,7 @@ fn detect_js_tools(dir: &Path, tools: &mut Vec<DetectedTool>) {
                 name: "eslint".to_string(),
                 config_path: eslint_config,
                 tool_type: ToolType::Linter,
-                language: Language::JavaScript, // Also applies to TypeScript
+                languages: vec![Language::JavaScript, Language::TypeScript],
             });
             break; // Only need to detect one ESLint config
         }
@@ -331,7 +331,7 @@ fn detect_js_tools(dir: &Path, tools: &mut Vec<DetectedTool>) {
             name: "eslint".to_string(),
             config_path: alt_eslint_config,
             tool_type: ToolType::Linter,
-            language: Language::JavaScript, // Also applies to TypeScript
+            languages: vec![Language::JavaScript, Language::TypeScript],
         });
     }
 
@@ -343,7 +343,7 @@ fn detect_js_tools(dir: &Path, tools: &mut Vec<DetectedTool>) {
             name: "eslint".to_string(),
             config_path: mjs_eslint_config,
             tool_type: ToolType::Linter,
-            language: Language::JavaScript, // Also applies to TypeScript
+            languages: vec![Language::JavaScript, Language::TypeScript],
         });
     }
 
@@ -355,7 +355,7 @@ fn detect_js_tools(dir: &Path, tools: &mut Vec<DetectedTool>) {
             name: "typescript".to_string(),
             config_path: tsconfig,
             tool_type: ToolType::TypeChecker,
-            language: Language::TypeScript,
+            languages: vec![Language::TypeScript],
         });
     }
 
@@ -367,7 +367,7 @@ fn detect_js_tools(dir: &Path, tools: &mut Vec<DetectedTool>) {
             name: "dprint".to_string(),
             config_path: dprint_config,
             tool_type: ToolType::Formatter,
-            language: Language::JavaScript, // Also applies to TypeScript
+            languages: vec![Language::JavaScript, Language::TypeScript],
         });
     }
 }
@@ -383,7 +383,7 @@ fn detect_css_tools(dir: &Path, tools: &mut Vec<DetectedTool>) {
                 name: "stylelint".to_string(),
                 config_path: stylelint_config,
                 tool_type: ToolType::Linter,
-                language: Language::Css,
+                languages: vec![Language::Css],
             });
             break; // Only need to detect one stylelint config
         }
@@ -397,7 +397,7 @@ fn detect_css_tools(dir: &Path, tools: &mut Vec<DetectedTool>) {
             name: "stylelint".to_string(),
             config_path: alt_stylelint_config,
             tool_type: ToolType::Linter,
-            language: Language::Css,
+            languages: vec![Language::Css],
         });
     }
 }
@@ -412,7 +412,7 @@ fn detect_html_tools(dir: &Path, tools: &mut Vec<DetectedTool>) {
             name: "htmlhint".to_string(),
             config_path: htmlhint_config,
             tool_type: ToolType::Linter,
-            language: Language::Html,
+            languages: vec![Language::Html],
         });
     }
 
@@ -424,7 +424,7 @@ fn detect_html_tools(dir: &Path, tools: &mut Vec<DetectedTool>) {
             name: "djlint".to_string(),
             config_path: djlint_config,
             tool_type: ToolType::Formatter,
-            language: Language::Html,
+            languages: vec![Language::Html],
         });
     }
 }

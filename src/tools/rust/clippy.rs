@@ -32,7 +32,7 @@ impl Clippy {
                     "A collection of lints to catch common mistakes and improve your Rust code"
                         .to_string(),
                 tool_type: ToolType::Linter,
-                language: Language::Rust,
+                languages: vec![Language::Rust],
             },
         }
     }
@@ -300,7 +300,7 @@ impl Clippy {
             tool: Some(ToolInfo {
                 name: self.name().to_string(),
                 tool_type: self.tool_type(),
-                language: self.language(),
+                languages: self.languages(),
                 available: self.is_available(),
                 version: self.version(),
                 description: self.description().to_string(),
@@ -317,15 +317,15 @@ impl Clippy {
 }
 
 impl ClippyFixer {
-    /// Create a new ClippyFixer
+    /// Create a new Clippy fixer
     pub fn new() -> Self {
         Self {
             base: ToolBase {
                 name: "clippy-fix".to_string(),
-                description: "Automatically fix common mistakes in your Rust code with Clippy"
-                    .to_string(),
+                description:
+                    "Automatic fixer for Clippy lints".to_string(),
                 tool_type: ToolType::Fixer,
-                language: Language::Rust,
+                languages: vec![Language::Rust],
             },
         }
     }
@@ -356,7 +356,7 @@ impl LintTool for Clippy {
                 tool: Some(ToolInfo {
                     name: self.name().to_string(),
                     tool_type: self.tool_type(),
-                    language: self.language(),
+                    languages: self.languages(),
                     available: self.is_available(),
                     version: self.version(),
                     description: self.description().to_string(),
@@ -388,7 +388,7 @@ impl LintTool for Clippy {
                 tool: Some(ToolInfo {
                     name: self.name().to_string(),
                     tool_type: self.tool_type(),
-                    language: self.language(),
+                    languages: self.languages(),
                     available: self.is_available(),
                     version: self.version(),
                     description: self.description().to_string(),
@@ -413,8 +413,8 @@ impl LintTool for Clippy {
         self.base.tool_type
     }
 
-    fn language(&self) -> Language {
-        self.base.language
+    fn languages(&self) -> Vec<Language> {
+        self.base.languages.clone()
     }
 
     fn description(&self) -> &str {
@@ -484,7 +484,7 @@ impl LintTool for ClippyFixer {
                 tool: Some(ToolInfo {
                     name: self.name().to_string(),
                     tool_type: self.tool_type(),
-                    language: self.language(),
+                    languages: self.languages(),
                     available: self.is_available(),
                     version: self.version(),
                     description: self.description().to_string(),
@@ -516,7 +516,7 @@ impl LintTool for ClippyFixer {
                 tool: Some(ToolInfo {
                     name: self.name().to_string(),
                     tool_type: self.tool_type(),
-                    language: self.language(),
+                    languages: self.languages(),
                     available: self.is_available(),
                     version: self.version(),
                     description: self.description().to_string(),
@@ -578,8 +578,8 @@ impl LintTool for ClippyFixer {
         self.base.tool_type
     }
 
-    fn language(&self) -> Language {
-        self.base.language
+    fn languages(&self) -> Vec<Language> {
+        self.base.languages.clone()
     }
 
     fn description(&self) -> &str {

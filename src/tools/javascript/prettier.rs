@@ -30,7 +30,7 @@ impl Prettier {
                 description: "Opinionated code formatter for JavaScript, TypeScript, and more"
                     .to_string(),
                 tool_type: ToolType::Formatter,
-                language: Language::JavaScript, // Also handles TypeScript
+                languages: vec![Language::JavaScript, Language::TypeScript],
             },
         }
     }
@@ -190,7 +190,7 @@ impl LintTool for Prettier {
             tool: Some(ToolInfo {
                 name: self.name().to_string(),
                 tool_type: self.tool_type(),
-                language: self.language(),
+                languages: self.languages(),
                 available: self.is_available(),
                 version: self.version(),
                 description: self.description().to_string(),
@@ -207,8 +207,8 @@ impl LintTool for Prettier {
         self.base.tool_type
     }
 
-    fn language(&self) -> Language {
-        self.base.language
+    fn languages(&self) -> Vec<Language> {
+        self.base.languages.clone()
     }
 
     fn description(&self) -> &str {

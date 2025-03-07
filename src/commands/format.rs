@@ -191,7 +191,7 @@ where
 
         // Setup formatters in the UI
         for formatter in &available_formatters {
-            let language = format!("{:?}", formatter.language());
+            let language = format!("{:?}", formatter.languages());
             let tool_type = format!("{:?}", formatter.tool_type());
             let spinner_index =
                 status_display.add_tool_status(formatter.name(), &language, &tool_type);
