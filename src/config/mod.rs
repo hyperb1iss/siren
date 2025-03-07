@@ -34,20 +34,11 @@ impl Default for GeneralConfig {
 
 /// Style configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StyleConfig {
-    /// Theme to use
-    pub theme: String,
-
-    /// Use emoji in output
-    pub use_emoji: bool,
-}
+pub struct StyleConfig {}
 
 impl Default for StyleConfig {
     fn default() -> Self {
-        Self {
-            theme: "default".to_string(),
-            use_emoji: true,
-        }
+        Self {}
     }
 }
 

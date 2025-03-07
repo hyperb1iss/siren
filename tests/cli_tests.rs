@@ -15,8 +15,6 @@ fn test_cli_default_values() {
     assert_eq!(cli.verbose, 0);
     assert!(!cli.quiet);
     assert_eq!(cli.config, None);
-    assert_eq!(cli.theme, None);
-    assert!(!cli.no_emoji);
     assert!(!cli.ci);
 }
 

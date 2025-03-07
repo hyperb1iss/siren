@@ -128,10 +128,6 @@ fail_level = "error"
 use_relative_paths = true
 
 [style]
-# Use a more feminine color scheme
-theme = "enchantress"
-# Show emoji in output (default: true)
-use_emoji = true
 
 # Override default settings for Python
 [languages.python] 

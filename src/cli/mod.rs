@@ -77,14 +77,6 @@ pub struct Cli {
     #[arg(short = 'c', long)]
     pub config: Option<PathBuf>,
 
-    /// Use a theme
-    #[arg(long)]
-    pub theme: Option<String>,
-
-    /// Disable emoji in output
-    #[arg(long)]
-    pub no_emoji: bool,
-
     /// CI mode (non-interactive, machine-readable output)
     #[arg(long)]
     pub ci: bool,

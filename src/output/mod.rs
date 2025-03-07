@@ -26,9 +26,6 @@ pub trait OutputFormatter {
 /// Default implementation that uses pretty formatting with colors
 #[derive(Clone)]
 pub struct PrettyFormatter {
-    /// Whether to use emojis
-    use_emoji: bool,
-
     /// Whether to use colors (kept for future use)
     _use_colors: bool,
 }
@@ -42,36 +39,24 @@ impl Default for PrettyFormatter {
 impl PrettyFormatter {
     /// Create a new PrettyFormatter
     pub fn new() -> Self {
-        Self {
-            use_emoji: true,
-            _use_colors: true,
-        }
+        Self { _use_colors: true }
     }
 
     /// Create a new PrettyFormatter with custom settings (kept for future use)
-    fn _with_options(use_emoji: bool, use_colors: bool) -> Self {
+    fn _with_options(use_colors: bool) -> Self {
         Self {
-            use_emoji,
             _use_colors: use_colors,
         }
     }
 
-    // Helper to get language emoji with fallback for no-emoji mode
+    // Helper to get language emoji
     fn get_language_emoji(&self, language: &Language) -> &'static str {
-        if self.use_emoji {
-            language_emoji(language)
-        } else {
-            ""
-        }
+        language_emoji(language)
     }
 
-    // Helper to get tool emoji with fallback for no-emoji mode
+    // Helper to get tool emoji
     fn get_tool_emoji(&self, tool_type: &ToolType) -> &'static str {
-        if self.use_emoji {
-            tool_emoji(tool_type)
-        } else {
-            ""
-        }
+        tool_emoji(tool_type)
     }
 }
 

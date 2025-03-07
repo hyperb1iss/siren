@@ -181,16 +181,6 @@ fn add_default_javascript_tools(tools: &mut HashMap<String, ToolConfig>) {
     );
 }
 
-/// Create an enchantress theme config (pink/purple based)
-pub fn create_enchantress_theme() -> StyleConfig {
-    StyleConfig {
-        theme: "enchantress".to_string(),
-        use_emoji: true,
-        use_unicode: true,
-        verbosity: 1,
-    }
-}
-
 /// Create a strict config for CI environments
 pub fn create_ci_config() -> GeneralConfig {
     GeneralConfig {

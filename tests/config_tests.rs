@@ -26,10 +26,6 @@ fn test_default_config() {
     assert_eq!(default_config.general.fail_level, "error");
     assert!(default_config.general.use_relative_paths);
 
-    // Check style config defaults
-    assert_eq!(default_config.style.theme, "default");
-    assert!(default_config.style.use_emoji);
-
     // Check that languages and tools maps are empty
     assert!(default_config.languages.is_empty());
     assert!(default_config.tools.is_empty());
@@ -50,8 +46,6 @@ fn test_load_toml_config() {
     use_relative_paths = false
     
     [style]
-    theme = "ocean"
-    use_emoji = false
     
     [languages.Rust]
     line_length = 100
@@ -87,9 +81,6 @@ fn test_load_toml_config() {
     // Verify the loaded config has the expected values
     assert_eq!(config.general.fail_level, "warning");
     assert!(!config.general.use_relative_paths);
-
-    assert_eq!(config.style.theme, "ocean");
-    assert!(!config.style.use_emoji);
 
     // Check language configs
     let rust_config = config
@@ -153,7 +144,6 @@ fn test_config_not_found() {
 
     // Verify it loaded the default config
     assert_eq!(config.general.fail_level, "error"); // Default value
-    assert_eq!(config.style.theme, "default"); // Default value
     assert!(config.languages.is_empty());
     assert!(config.tools.is_empty());
 }
@@ -186,8 +176,6 @@ fn test_partial_config() {
 
     // Verify unspecified fields have default values
     assert!(config.general.use_relative_paths); // Default value
-    assert_eq!(config.style.theme, "default"); // Default value
-    assert!(config.style.use_emoji); // Default value
     assert!(config.languages.is_empty());
 }
 
