@@ -17,7 +17,7 @@ fn create_test_fixture(languages: Vec<Language>, issue_type: &str) -> (TempDir, 
     let (file_name, content) = match (languages.first().unwrap(), issue_type) {
         // Rust fixtures
         (Language::Rust, "unused_variable") => (
-            "unused_var.rs",
+            "src/main.rs",
             r#"
 // This file intentionally contains an unused variable for testing
 fn main() {
@@ -28,7 +28,7 @@ fn main() {
             "#,
         ),
         (Language::Rust, "formatting") => (
-            "bad_format.rs",
+            "src/main.rs",
             r#"
 fn main(){let poorly_formatted=true;if poorly_formatted {println!("This code is intentionally poorly formatted");}}
             "#,
@@ -94,7 +94,31 @@ console.log(   badlyFormattedFunction(1,2,   3));
         ),
     };
 
-    let file_path = temp_dir.path().join(file_name);
+    let file_path = if languages.contains(&Language::Rust) {
+        // Create src directory for Rust files
+        std::fs::create_dir_all(temp_dir.path().join("src"))
+            .expect("Failed to create src directory");
+
+        // Create Cargo.toml for Rust projects
+        let cargo_toml = temp_dir.path().join("Cargo.toml");
+        let mut cargo_file = File::create(&cargo_toml).expect("Failed to create Cargo.toml");
+        cargo_file
+            .write_all(
+                br#"[package]
+name = "test-fixture"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+"#,
+            )
+            .expect("Failed to write Cargo.toml");
+
+        temp_dir.path().join(file_name)
+    } else {
+        temp_dir.path().join(file_name)
+    };
+
     let mut file = File::create(&file_path).expect("Failed to create test file");
     file.write_all(content.trim().as_bytes())
         .expect("Failed to write test content");
@@ -238,6 +262,22 @@ async fn verify_issue_detection(
 
 #[tokio::test]
 async fn test_rust_linting() {
+    // Check if cargo clippy is available, skip test if not
+    if !siren::utils::command_exists("cargo") {
+        println!("Skipping Rust linting test - cargo not found");
+        return;
+    }
+
+    // Try to run cargo clippy command to check if it's available
+    let clippy_check = std::process::Command::new("cargo")
+        .args(["clippy", "--version"])
+        .output();
+
+    if clippy_check.is_err() || !clippy_check.unwrap().status.success() {
+        println!("Skipping Rust linting test - clippy not available");
+        return;
+    }
+
     verify_issue_detection(vec![Language::Rust], "unused_variable", ToolType::Linter, 1).await;
 }
 

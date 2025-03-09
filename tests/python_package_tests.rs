@@ -67,7 +67,7 @@ fn test_optimize_paths_for_python_packages() {
 
     // With the new path optimization strategy, we expect all Python files to be included individually
     // since there's no special handling for Python packages anymore
-    let expected_paths: Vec<_> = all_files.iter().cloned().collect();
+    let expected_paths: Vec<_> = all_files.to_vec();
 
     // Sort both vectors for comparison
     let mut optimized_paths_sorted = optimized_paths.clone();
@@ -104,7 +104,7 @@ fn test_optimize_paths_with_mixed_structure() {
     let optimized_paths = siren::utils::optimize_paths_for_tools(&mixed_files);
 
     // With the new path optimization strategy, we expect all files to be included individually
-    let expected_paths: Vec<_> = mixed_files.iter().cloned().collect();
+    let expected_paths: Vec<_> = mixed_files.to_vec();
 
     // Sort both vectors for comparison
     let mut optimized_paths_sorted = optimized_paths.clone();

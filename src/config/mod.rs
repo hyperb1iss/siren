@@ -33,14 +33,8 @@ impl Default for GeneralConfig {
 }
 
 /// Style configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct StyleConfig {}
-
-impl Default for StyleConfig {
-    fn default() -> Self {
-        Self {}
-    }
-}
 
 /// Language-specific configuration
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

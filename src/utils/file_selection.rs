@@ -9,61 +9,76 @@ pub fn collect_files_to_process(
     paths: &[PathBuf],
     git_modified_only: bool,
 ) -> Result<Vec<PathBuf>, crate::errors::SirenError> {
-    if paths.is_empty() {
-        return Ok(Vec::new());
+    // If git_modified_only is true, just get modified files without any filtering
+    if git_modified_only {
+        // Use the current directory or the first path's parent if available
+        let git_root = if !paths.is_empty() {
+            if paths[0].is_dir() {
+                paths[0].clone()
+            } else {
+                paths[0].parent().unwrap_or(Path::new(".")).to_path_buf()
+            }
+        } else {
+            PathBuf::from(".")
+        };
+
+        return crate::utils::get_git_modified_files(&git_root)
+            .map_err(crate::errors::SirenError::Io);
     }
 
-    // Get project root directory (for git operations)
-    let dir = paths
-        .first()
-        .map(|p| p.as_path())
-        .unwrap_or_else(|| Path::new("."));
+    // If no paths provided, handle special case
+    if paths.is_empty() {
+        // Find project markers in current directory
+        let project_markers = [
+            "pyproject.toml",
+            "Cargo.toml",
+            "package.json",
+            "composer.json",
+            "go.mod",
+        ];
 
-    // Collect files to process
-    if git_modified_only {
-        // Get files modified in git
-        let git_files = crate::utils::get_git_modified_files(dir)?;
+        let current_dir = std::env::current_dir()?;
 
-        // Filter git files to only include those that match our paths
-        if paths.len() == 1 && paths[0] == PathBuf::from(".") {
-            // If only the current directory is specified, use all git files
-            Ok(git_files)
-        } else {
-            Ok(git_files
-                .into_iter()
-                .filter(|file| {
-                    paths.iter().any(|path| {
-                        if path.is_dir() {
-                            file.starts_with(path)
-                        } else {
-                            file == path
+        // Check for project markers
+        let has_project_marker = project_markers
+            .iter()
+            .any(|marker| current_dir.join(marker).exists());
+
+        if has_project_marker {
+            // Find immediate directories with processable files
+            let entries = std::fs::read_dir(&current_dir)?;
+            let mut immediate_dirs = Vec::new();
+
+            for entry in entries.filter_map(Result::ok) {
+                let path = entry.path();
+                if path.is_dir()
+                    && !path
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .starts_with('.')
+                {
+                    // Check if directory has any non-hidden files
+                    if let Ok(dir_entries) = std::fs::read_dir(&path) {
+                        if dir_entries
+                            .filter_map(Result::ok)
+                            .any(|e| e.file_type().map(|ft| ft.is_file()).unwrap_or(false))
+                        {
+                            immediate_dirs.push(path);
                         }
-                    })
-                })
-                .collect())
-        }
-    } else {
-        let mut all_files = Vec::new();
-
-        // If only the current directory is specified, scan it
-        if paths.len() == 1 && paths[0] == PathBuf::from(".") {
-            let dir_files = crate::utils::collect_files_with_gitignore(Path::new("."))?;
-            all_files.extend(dir_files);
-        } else {
-            for path in paths {
-                if path.is_file() {
-                    // If it's a specific file, just add it directly
-                    all_files.push(path.clone());
-                } else if path.is_dir() {
-                    // If it's a directory, collect files from it
-                    let dir_files = crate::utils::collect_files_with_gitignore(path)?;
-                    all_files.extend(dir_files);
+                    }
                 }
             }
-        }
 
-        Ok(all_files)
+            return Ok(immediate_dirs);
+        } else {
+            // No project markers, just use current directory
+            return Ok(vec![PathBuf::from(".")]);
+        }
     }
+
+    // For paths provided, return them directly - no expansion needed
+    Ok(paths.to_vec())
 }
 
 /// Filter files to only include those that can be handled by the specified tool

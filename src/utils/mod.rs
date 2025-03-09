@@ -72,32 +72,57 @@ pub fn is_git_repo(dir: &Path) -> bool {
 
 /// Get list of files modified in git
 pub fn get_git_modified_files(dir: &Path) -> Result<Vec<PathBuf>, std::io::Error> {
+    println!("Looking for git repo in: {:?}", dir);
     if !is_git_repo(dir) {
+        println!("Not a git repository: {:?}", dir);
         return Ok(Vec::new());
     }
+    println!("Found git repository: {:?}", dir);
 
-    // Run git command to get modified files
+    // Get modified files using git status
     let output = Command::new("git")
-        .arg("ls-files")
-        .arg("--modified")
-        .arg("--others")
-        .arg("--exclude-standard")
+        .args(["status", "--porcelain"])
         .current_dir(dir)
         .output()?;
 
     if !output.status.success() {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            String::from_utf8_lossy(&output.stderr).to_string(),
-        ));
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+        println!("Git status failed: {}", stderr);
+        return Err(std::io::Error::new(std::io::ErrorKind::Other, stderr));
     }
 
-    // Parse output into file paths
-    let files = String::from_utf8_lossy(&output.stdout)
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    println!("Git status output: {:?}", stdout);
+
+    // Parse output into file paths - include both modified and added files
+    let files: Vec<PathBuf> = stdout
         .lines()
-        .map(|line| dir.join(line))
+        .filter(|line| !line.is_empty()) // Skip empty lines
+        .filter_map(|line| {
+            println!("Processing git status line: '{}'", line);
+
+            // Git status --porcelain format has two status characters followed by a space
+            // then the file path. Skip untracked files (marked with "??")
+            if line.starts_with("??") {
+                println!("Skipping untracked file");
+                return None;
+            }
+
+            // Extract the filename part (after the status codes and space)
+            if line.len() > 3 {
+                let file_path = line[3..].trim();
+                println!("Extracted file path: '{}'", file_path);
+                let absolute_path = dir.join(file_path);
+                println!("Resolved to absolute path: {:?}", absolute_path);
+                Some(absolute_path)
+            } else {
+                println!("Line too short to contain a valid path");
+                None
+            }
+        })
         .collect();
 
+    println!("Found {} modified files: {:?}", files.len(), files);
     Ok(files)
 }
 
