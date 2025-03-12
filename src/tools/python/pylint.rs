@@ -103,19 +103,13 @@ impl PyLint {
         files: &[PathBuf],
         config: &ModelsToolConfig,
     ) -> Result<(Vec<LintIssue>, String, String), ToolError> {
-        // Skip if no files can be handled
-        let files_to_check: Vec<PathBuf> = files
-            .iter()
-            .filter(|file| self.can_handle(file))
-            .cloned()
-            .collect();
-
-        if files_to_check.is_empty() {
+        // Skip if no files to check
+        if files.is_empty() {
             return Ok((Vec::new(), String::new(), String::new()));
         }
 
-        // Optimize paths by grouping by directory when possible
-        let optimized_paths = utils::optimize_paths_for_tools(&files_to_check);
+        // We'll use the files directly - we already did path optimization in the command handler
+        let paths_to_check = files;
 
         let mut command = Command::new("pylint");
         command.arg("--output-format=text");
@@ -128,7 +122,7 @@ impl PyLint {
         }
 
         // Add all the paths to check
-        for path in &optimized_paths {
+        for path in paths_to_check {
             command.arg(path);
         }
 

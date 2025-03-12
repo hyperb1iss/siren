@@ -4,6 +4,8 @@ use crate::cli::DetectArgs;
 use crate::detection::ProjectDetector;
 use crate::errors::SirenError;
 use crate::output::OutputFormatter;
+use crate::utils::path_manager::PathManager;
+use colored::*;
 
 /// Command handler for the detect command
 pub struct DetectCommand<D, O>
@@ -40,6 +42,9 @@ where
             args_paths
         };
 
+        // Create and initialize the path manager
+        let mut path_manager = PathManager::new();
+
         // Get project root directory
         let dir = all_paths
             .first()
@@ -64,6 +69,10 @@ where
             all_paths.clone()
         };
 
+        // Collect files using PathManager
+        path_manager.collect_files(&paths_to_detect, false)?;
+        path_manager.organize_contexts();
+
         // Detect project information
         let (project_info, _) = if !patterns.is_empty() {
             self.detector.detect_with_patterns(dir, &patterns)?
@@ -74,6 +83,28 @@ where
         // Display detected project info
         let info_output = self.output_formatter.format_detection(&project_info);
         println!("{}", info_output);
+
+        // Display additional information from PathManager
+        println!("\n📂 Files by Language:");
+        for language in &project_info.languages {
+            let files = path_manager.get_files_by_language(*language);
+            println!("  {} {:?}: {} files", "•".cyan(), language, files.len());
+        }
+
+        println!("\n🗂️ Project Contexts:");
+        for (i, context) in path_manager.get_all_contexts().iter().enumerate() {
+            let lang_str = context
+                .language
+                .map_or("Unknown".to_string(), |l| format!("{:?}", l));
+            println!(
+                "  {} Context {}: {} ({} files)",
+                "•".cyan(),
+                i + 1,
+                lang_str,
+                context.files.len()
+            );
+            println!("    Root: {}", context.root.display());
+        }
 
         Ok(())
     }

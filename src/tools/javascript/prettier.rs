@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use crate::errors::ToolError;
 use crate::models::tools::ToolConfig as ModelsToolConfig;
@@ -34,10 +34,23 @@ impl Prettier {
             },
         }
     }
+}
 
-    /// Check if a file can be formatted with Prettier
-    fn can_format_file(&self, file_path: &Path) -> bool {
-        if let Some(ext) = file_path.extension().and_then(|e| e.to_str()) {
+impl LintTool for Prettier {
+    /// Get tool name
+    fn name(&self) -> &str {
+        &self.base.name
+    }
+
+    /// Check if this tool can handle a file
+    fn can_handle(&self, file: &Path) -> bool {
+        if let Some(ext) = file.extension().and_then(|e| e.to_str()) {
+            // List of extensions supported by Prettier
+            let _supported_exts = &[
+                "js", "jsx", "ts", "tsx", "json", "css", "scss", "less", "html", "vue", "graphql",
+                "md", "yaml", "yml",
+            ];
+
             matches!(
                 ext,
                 "js" | "jsx"
@@ -58,16 +71,6 @@ impl Prettier {
             false
         }
     }
-}
-
-impl LintTool for Prettier {
-    fn name(&self) -> &str {
-        &self.base.name
-    }
-
-    fn can_handle(&self, file_path: &Path) -> bool {
-        self.can_format_file(file_path)
-    }
 
     fn execute(
         &self,
@@ -76,6 +79,21 @@ impl LintTool for Prettier {
     ) -> Result<LintResult, ToolError> {
         let start = Instant::now();
         let mut issues = Vec::new();
+
+        // Skip if no files to format
+        if files.is_empty() {
+            return Ok(LintResult {
+                success: true,
+                issues: Vec::new(),
+                tool_name: self.name().to_string(),
+                stdout: None,
+                stderr: None,
+                execution_time: Duration::from_secs(0),
+                tool: None,
+            });
+        }
+
+        // We'll use the files directly - we already did path optimization in the command handler
 
         // Filter files to only those we can handle
         let files_to_process: Vec<PathBuf> = files
@@ -104,19 +122,10 @@ impl LintTool for Prettier {
         }
 
         // Optimize paths by grouping files with supported extensions
-        let supported_exts = &[
+        let _supported_exts = &[
             "js", "jsx", "ts", "tsx", "json", "css", "scss", "less", "html", "vue", "graphql",
             "md", "yaml", "yml",
         ];
-
-        // Use the unified path finder to get optimized and gitignore-respecting paths
-        // Prettier can handle directories directly, so use_directories=true
-        let valid_paths = utils::find_tool_paths(
-            &files_to_process,
-            supported_exts,
-            |path| self.can_handle(path),
-            true,
-        );
 
         // Check if we should fix issues
         let fix_mode = config.auto_fix;
@@ -132,7 +141,7 @@ impl LintTool for Prettier {
             }
 
             // Add all valid paths
-            for path in &valid_paths {
+            for path in &files_to_process {
                 command.arg(path);
             }
 
@@ -165,7 +174,7 @@ impl LintTool for Prettier {
             }
 
             // Add all valid paths
-            for path in &valid_paths {
+            for path in &files_to_process {
                 command.arg(path);
             }
 

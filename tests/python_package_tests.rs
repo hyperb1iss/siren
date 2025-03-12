@@ -1,7 +1,10 @@
 //! Tests for Python package path optimization
 
 use std::fs::{self, File};
+use std::path::PathBuf;
 use tempfile::TempDir;
+
+use siren::utils::path_manager::PathManager;
 
 /// Create a test directory structure with Python files and __init__.py files
 fn create_python_project_structure() -> TempDir {
@@ -62,23 +65,28 @@ fn test_optimize_paths_for_python_packages() {
         base_dir.join("app.py"),
     ];
 
-    // Optimize paths
-    let optimized_paths = siren::utils::optimize_paths_for_tools(&all_files);
+    // Create a PathManager and add files
+    let mut path_manager = PathManager::new();
+    path_manager.add_files(all_files.clone());
 
-    // With the new path optimization strategy, we expect all Python files to be included individually
-    // since there's no special handling for Python packages anymore
-    let expected_paths: Vec<_> = all_files.to_vec();
+    // Organize contexts to detect Python packages
+    path_manager.organize_contexts();
 
-    // Sort both vectors for comparison
-    let mut optimized_paths_sorted = optimized_paths.clone();
-    optimized_paths_sorted.sort();
-    let mut expected_paths_sorted = expected_paths.clone();
-    expected_paths_sorted.sort();
+    // Get all contexts
+    let contexts = path_manager.get_all_contexts();
 
-    assert_eq!(
-        optimized_paths_sorted, expected_paths_sorted,
-        "Optimized paths should include all Python files individually with the new strategy"
-    );
+    // Verify that we have at least one context for Python files
+    assert!(!contexts.is_empty());
+
+    // Verify that all files are included in the contexts
+    let context_files: Vec<PathBuf> = contexts.iter().flat_map(|ctx| ctx.files.clone()).collect();
+
+    assert_eq!(context_files.len(), all_files.len());
+
+    // Verify that each file is included
+    for file in &all_files {
+        assert!(context_files.contains(file));
+    }
 }
 
 #[test]
@@ -86,34 +94,43 @@ fn test_optimize_paths_with_mixed_structure() {
     let temp_dir = create_python_project_structure();
     let base_dir = temp_dir.path();
 
-    // Create a non-Python directory without __init__.py
-    fs::create_dir_all(base_dir.join("docs")).unwrap();
-    File::create(base_dir.join("docs/index.html")).unwrap();
-    File::create(base_dir.join("docs/style.css")).unwrap();
-
-    // Create a list of mixed files
+    // Create a list of mixed files (Python and non-Python)
     let mixed_files = vec![
         base_dir.join("core/models/user.py"),
+        base_dir.join("core/models/product.py"),
         base_dir.join("core/views/home.py"),
-        base_dir.join("docs/index.html"),
-        base_dir.join("docs/style.css"),
+        base_dir.join("core/utils.py"),
+        base_dir.join("tests/test_models.py"),
         base_dir.join("app.py"),
+        // Add some non-Python files
+        base_dir.join("README.md"),
+        base_dir.join("config.json"),
     ];
 
-    // Optimize paths
-    let optimized_paths = siren::utils::optimize_paths_for_tools(&mixed_files);
+    // Create the non-Python files
+    File::create(base_dir.join("README.md")).unwrap();
+    File::create(base_dir.join("config.json")).unwrap();
 
-    // With the new path optimization strategy, we expect all files to be included individually
-    let expected_paths: Vec<_> = mixed_files.to_vec();
+    // Create a PathManager and add files
+    let mut path_manager = PathManager::new();
+    path_manager.add_files(mixed_files.clone());
 
-    // Sort both vectors for comparison
-    let mut optimized_paths_sorted = optimized_paths.clone();
-    optimized_paths_sorted.sort();
-    let mut expected_paths_sorted = expected_paths.clone();
-    expected_paths_sorted.sort();
+    // Organize contexts to detect Python packages
+    path_manager.organize_contexts();
 
-    assert_eq!(
-        optimized_paths_sorted, expected_paths_sorted,
-        "Optimized paths should include all files individually with the new strategy"
-    );
+    // Get all contexts
+    let contexts = path_manager.get_all_contexts();
+
+    // Verify that we have at least one context
+    assert!(!contexts.is_empty());
+
+    // Verify that all files are included in the contexts
+    let context_files: Vec<PathBuf> = contexts.iter().flat_map(|ctx| ctx.files.clone()).collect();
+
+    assert_eq!(context_files.len(), mixed_files.len());
+
+    // Verify that each file is included
+    for file in &mixed_files {
+        assert!(context_files.contains(file));
+    }
 }

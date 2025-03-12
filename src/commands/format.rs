@@ -1,4 +1,5 @@
-use std::path::{Path, PathBuf};
+use std::collections::HashMap;
+use std::path::PathBuf;
 
 use crate::cli::{FormatArgs, Verbosity};
 use crate::config::{SirenConfig, ToolConfig as ConfigToolConfig};
@@ -9,7 +10,7 @@ use crate::models::ToolType;
 use crate::output::{terminal, OutputFormatter};
 use crate::runner::ToolRunner;
 use crate::tools::ToolRegistry;
-use crate::utils::file_selection;
+use crate::utils::path_manager::PathManager;
 use colored::*;
 use log::debug;
 
@@ -65,14 +66,23 @@ where
             args_paths
         };
 
-        // Get project root directory
-        let _dir = all_paths
-            .first()
-            .map(|p| p.as_path())
-            .unwrap_or_else(|| Path::new("."));
+        // Create and initialize the path manager
+        let mut path_manager = if !all_paths.is_empty() && all_paths[0] != PathBuf::from(".") {
+            // Explicitly provided paths - don't filter them
+            let mut pm = PathManager::with_explicit_paths(all_paths.clone());
+            pm.collect_files(&all_paths, git_modified_only)?;
+            pm
+        } else {
+            // Default directory scanning behavior
+            let mut pm = PathManager::for_discovered_paths();
+            pm.collect_files(&all_paths, git_modified_only)?;
+            pm
+        };
+
+        path_manager.organize_contexts();
 
         // Detect project information
-        let (project_info, detected_files) = self.detector.detect(&all_paths)?;
+        let (project_info, _) = self.detector.detect(&all_paths)?;
 
         // Display detected project info based on verbosity
         if self.verbosity >= Verbosity::Normal {
@@ -144,14 +154,8 @@ where
             return Ok(());
         }
 
-        // Use the files collected during detection if not using git-modified-only
-        let all_files = if git_modified_only {
-            // For git-modified-only, we still need to use the file_selection utility
-            file_selection::collect_files_to_process(&all_paths, git_modified_only)?
-        } else {
-            // Reuse the files collected during detection
-            detected_files
-        };
+        // Use the files collected by the path manager
+        let all_files = path_manager.get_all_files().to_vec();
 
         // Debug output for all collected files
         if self.verbosity >= Verbosity::Verbose {
@@ -201,14 +205,25 @@ where
         // Add a small delay to ensure we can see the spinners before they complete
         std::thread::sleep(std::time::Duration::from_millis(800));
 
+        // Create a map to store paths for each formatter
+        let mut formatter_paths_map: HashMap<String, Vec<PathBuf>> = HashMap::new();
+
         // Run each formatter with its filtered files
         let mut all_results = Vec::new();
         let mut total_issues = 0;
 
         for (formatter, spinner_index) in &formatter_spinners {
-            // Filter files for this specific formatter
-            let files_for_formatter =
-                file_selection::filter_files_for_tool(&all_files, &**formatter);
+            // Get paths for this formatter
+            let files_for_formatter = if !path_manager.is_discovered() {
+                // For explicit paths, use them directly without optimization
+                path_manager.get_all_files().to_vec()
+            } else {
+                // For discovered paths, get optimized paths for this tool
+                path_manager.get_optimized_paths_for_tool(&**formatter)
+            };
+
+            // Store the paths for this formatter
+            formatter_paths_map.insert(formatter.name().to_string(), files_for_formatter.clone());
 
             if files_for_formatter.is_empty() {
                 if self.verbosity >= Verbosity::Normal {

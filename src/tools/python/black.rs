@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use crate::errors::ToolError;
 use crate::models::tools::ToolConfig as ModelsToolConfig;
@@ -55,6 +55,22 @@ impl LintTool for Black {
         let start = Instant::now();
         let mut issues = Vec::new();
 
+        // Skip if no files to format
+        if files.is_empty() {
+            return Ok(LintResult {
+                success: true,
+                issues: Vec::new(),
+                tool_name: self.name().to_string(),
+                stdout: None,
+                stderr: None,
+                execution_time: Duration::from_secs(0),
+                tool: None,
+            });
+        }
+
+        // We'll use the files directly - we already did path optimization in the command handler
+        // Unused but keeping comment for clarity on the approach
+
         // Check if we should fix issues
         let fix_mode = config.auto_fix;
 
@@ -84,9 +100,6 @@ impl LintTool for Black {
             });
         }
 
-        // Optimize paths by grouping by directory when possible
-        let optimized_paths = utils::optimize_paths_for_tools(&files_to_process);
-
         // Create a single command for all files
         let mut command = Command::new("black");
 
@@ -115,7 +128,7 @@ impl LintTool for Black {
         }
 
         // Add all paths to process
-        for path in &optimized_paths {
+        for path in &files_to_process {
             command.arg(path);
         }
 

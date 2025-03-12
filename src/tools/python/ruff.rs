@@ -34,53 +34,107 @@ impl Ruff {
     fn parse_output(&self, output: &str) -> Vec<LintIssue> {
         let mut issues = Vec::new();
 
-        // Regex to match Ruff output format when using --output-format=concise
-        // Format: file:line:column: error_code [*] message
-        let regex = Regex::new(r"(?m)^(.+):(\d+):(\d+):\s+(\w+\d+)(?:\s+\[\*\])?\s+(.+)$").unwrap();
+        // Try to parse as JSON
+        match serde_json::from_str::<serde_json::Value>(output) {
+            Ok(json_value) => {
+                if let Some(array) = json_value.as_array() {
+                    debug!("Processing {} Ruff diagnostics", array.len());
+                    for (i, diagnostic) in array.iter().enumerate() {
+                        // Extract required fields
+                        let path = diagnostic.get("filename").and_then(|v| v.as_str());
+                        let line_num = diagnostic
+                            .get("location")
+                            .and_then(|v| v.get("row"))
+                            .and_then(|v| v.as_u64());
+                        let column_num = diagnostic
+                            .get("location")
+                            .and_then(|v| v.get("column"))
+                            .and_then(|v| v.as_u64());
+                        let code_str = diagnostic.get("code").and_then(|v| v.as_str());
+                        let message_str = diagnostic.get("message").and_then(|v| v.as_str());
 
-        for capture in regex.captures_iter(output) {
-            let file_str = capture.get(1).unwrap().as_str();
-            let file_path = PathBuf::from(file_str);
+                        match (path, line_num, column_num, code_str, message_str) {
+                            (
+                                Some(path),
+                                Some(line_num),
+                                Some(column_num),
+                                Some(code_str),
+                                Some(message_str),
+                            ) => {
+                                let file_path = PathBuf::from(path);
+                                let line = line_num as usize;
+                                let column = column_num as usize;
 
-            let line = capture
-                .get(2)
-                .unwrap()
-                .as_str()
-                .parse::<usize>()
-                .unwrap_or(0);
-            let column = capture
-                .get(3)
-                .unwrap()
-                .as_str()
-                .parse::<usize>()
-                .unwrap_or(0);
-            let code = capture.get(4).unwrap().as_str();
-            let message = capture.get(5).unwrap().as_str();
+                                // Determine severity based on code prefix
+                                let severity =
+                                    if code_str.starts_with('E') || code_str.starts_with('F') {
+                                        IssueSeverity::Error
+                                    } else if code_str.starts_with('W') {
+                                        IssueSeverity::Warning
+                                    } else {
+                                        IssueSeverity::Style
+                                    };
 
-            // Determine severity based on code prefix
-            let severity = if code.starts_with('E') || code.starts_with('F') {
-                IssueSeverity::Error
-            } else if code.starts_with('W') {
-                IssueSeverity::Warning
-            } else {
-                IssueSeverity::Style
-            };
+                                // Check if the issue is fixable
+                                let fix_available = diagnostic.get("fix").is_some();
 
-            // Check if the issue is fixable (has [*] marker)
-            let fix_available =
-                output.contains(&format!("{}:{}:{}: {} [*]", file_str, line, column, code));
+                                // Get full message with code display if available
+                                let mut formatted_message =
+                                    format!("{}: {}", code_str, message_str);
 
-            issues.push(LintIssue {
-                severity,
-                message: format!("{}: {}", code, message),
-                file: Some(file_path),
-                line: Some(line),
-                column: Some(column),
-                code: Some(code.to_string()),
-                fix_available, // Set based on [*] marker
-            });
+                                // Add URL if available
+                                if let Some(url) = diagnostic.get("url").and_then(|v| v.as_str()) {
+                                    formatted_message.push_str(&format!("\nSee: {}", url));
+                                }
+
+                                // Add fix information if available
+                                if let Some(fix) = diagnostic.get("fix") {
+                                    if let Some(fix_msg) =
+                                        fix.get("message").and_then(|v| v.as_str())
+                                    {
+                                        formatted_message.push_str(&format!("\nFix: {}", fix_msg));
+                                    }
+                                }
+
+                                debug!(
+                                    "Processing diagnostic {}: {} at {}:{}",
+                                    i + 1,
+                                    code_str,
+                                    line,
+                                    column
+                                );
+                                issues.push(LintIssue {
+                                    severity,
+                                    message: formatted_message,
+                                    file: Some(file_path),
+                                    line: Some(line),
+                                    column: Some(column),
+                                    code: Some(code_str.to_string()),
+                                    fix_available,
+                                });
+                            }
+                            _ => {
+                                debug!(
+                                    "Skipping diagnostic {} due to missing required fields: {:?}",
+                                    i + 1,
+                                    diagnostic
+                                );
+                            }
+                        }
+                    }
+                } else {
+                    debug!("Ruff output is not a JSON array: {}", output);
+                }
+            }
+            Err(e) => {
+                debug!(
+                    "Failed to parse Ruff output as JSON: {} - Output: {}",
+                    e, output
+                );
+            }
         }
 
+        debug!("Finished parsing {} Ruff issues", issues.len());
         issues
     }
 
@@ -90,19 +144,13 @@ impl Ruff {
         files: &[PathBuf],
         config: &ModelsToolConfig,
     ) -> Result<(Vec<LintIssue>, String, String), ToolError> {
-        // Skip if no files can be handled
-        let files_to_check: Vec<PathBuf> = files
-            .iter()
-            .filter(|file| self.can_handle(file))
-            .cloned()
-            .collect();
-
-        if files_to_check.is_empty() {
+        // Skip if no files to check
+        if files.is_empty() {
             return Ok((Vec::new(), String::new(), String::new()));
         }
 
-        // Optimize paths by grouping by directory when possible
-        let optimized_paths = utils::optimize_paths_for_tools(&files_to_check);
+        // We'll use the files directly - we already did path optimization in the command handler
+        let paths_to_check = files;
 
         let mut command = Command::new("ruff");
         command.arg("check");
@@ -112,11 +160,11 @@ impl Ruff {
             command.arg(arg);
         }
 
-        // Add output format
-        command.arg("--output-format=concise");
+        // Add output format as JSON
+        command.arg("--output-format=json");
 
         // Add all the paths to check
-        for path in &optimized_paths {
+        for path in paths_to_check {
             command.arg(path);
         }
 
@@ -133,62 +181,22 @@ impl Ruff {
         let stdout = String::from_utf8_lossy(&output.stdout).to_string();
         let stderr = String::from_utf8_lossy(&output.stderr).to_string();
 
+        // Log raw output for debugging
+        debug!("Ruff raw stdout: {}", stdout);
+        debug!("Ruff raw stderr: {}", stderr);
+
+        // If we got a non-zero exit code but no stdout/stderr, this might be a tool failure
+        if !output.status.success() && stdout.is_empty() && stderr.is_empty() {
+            return Err(ToolError::ExecutionFailed {
+                name: self.name().to_string(),
+                message: format!("Ruff check failed with exit code: {}", output.status),
+            });
+        }
+
+        // Parse issues from JSON output
         let issues = self.parse_output(&stdout);
 
         Ok((issues, stdout, stderr))
-    }
-
-    /// Run ruff on multiple files to fix issues
-    fn fix_files(
-        &self,
-        files: &[PathBuf],
-        config: &ModelsToolConfig,
-    ) -> Result<(String, String), ToolError> {
-        // Skip if no files can be handled
-        let files_to_check: Vec<PathBuf> = files
-            .iter()
-            .filter(|file| self.can_handle(file))
-            .cloned()
-            .collect();
-
-        if files_to_check.is_empty() {
-            return Ok((String::new(), String::new()));
-        }
-
-        // Optimize paths by grouping by directory when possible
-        let optimized_paths = utils::optimize_paths_for_tools(&files_to_check);
-
-        let mut command = Command::new("ruff");
-        command.arg("check");
-        command.arg("--fix");
-
-        // Add extra arguments
-        for arg in &config.extra_args {
-            command.arg(arg);
-        }
-
-        // Add output format
-        command.arg("--output-format=concise");
-
-        // Add all the paths to fix
-        for path in &optimized_paths {
-            command.arg(path);
-        }
-
-        // Log the command
-        utils::log_command(&command);
-
-        // Run the command
-        let output = command.output().map_err(|e| ToolError::ExecutionFailed {
-            name: self.name().to_string(),
-            message: format!("Failed to execute ruff: {}", e),
-        })?;
-
-        // Parse the output
-        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-
-        Ok((stdout, stderr))
     }
 }
 
@@ -217,41 +225,23 @@ impl LintTool for Ruff {
     ) -> Result<LintResult, ToolError> {
         let start = Instant::now();
 
-        // Check if we should fix issues
-        let fix_mode = config.auto_fix;
+        // Check files
+        let (issues, stdout, stderr) = self.check_files(files, config)?;
 
-        let (issues, stdout, stderr) = if fix_mode {
-            // Fix all files in one go
-            let (fix_stdout, fix_stderr) = self.fix_files(files, config)?;
-            // After fixing, run check to get remaining issues
-            let (check_issues, check_stdout, check_stderr) = self.check_files(files, config)?;
+        // Debug output to help diagnose issues
+        debug!("Ruff found {} issues", issues.len());
+        for (i, issue) in issues.iter().enumerate() {
+            debug!(
+                "Issue {}: {} at {:?}:{:?}",
+                i + 1,
+                issue.message,
+                issue.file,
+                issue.line
+            );
+        }
 
-            // Combine stdout and stderr
-            let combined_stdout = if fix_stdout.is_empty() {
-                check_stdout
-            } else if check_stdout.is_empty() {
-                fix_stdout
-            } else {
-                format!("{}\n\n{}", fix_stdout, check_stdout)
-            };
-
-            let combined_stderr = if fix_stderr.is_empty() {
-                check_stderr
-            } else if check_stderr.is_empty() {
-                fix_stderr
-            } else {
-                format!("{}\n\n{}", fix_stderr, check_stderr)
-            };
-
-            (check_issues, combined_stdout, combined_stderr)
-        } else {
-            // Just check all files in one go
-            self.check_files(files, config)?
-        };
-
-        let execution_time = start.elapsed();
-
-        Ok(LintResult {
+        // Create a result with all issues found
+        let result = LintResult {
             tool_name: self.name().to_string(),
             tool: Some(ToolInfo {
                 name: self.name().to_string(),
@@ -261,20 +251,14 @@ impl LintTool for Ruff {
                 version: self.version(),
                 description: self.description().to_string(),
             }),
-            success: true, // Tool executed successfully even if issues were found
+            success: true,
             issues,
-            execution_time,
-            stdout: if stdout.is_empty() {
-                None
-            } else {
-                Some(stdout)
-            },
-            stderr: if stderr.is_empty() {
-                None
-            } else {
-                Some(stderr)
-            },
-        })
+            execution_time: start.elapsed(),
+            stdout: Some(stdout),
+            stderr: Some(stderr),
+        };
+
+        Ok(result)
     }
 
     fn tool_type(&self) -> ToolType {
@@ -322,19 +306,13 @@ impl RuffFormatter {
         files: &[PathBuf],
         config: &ModelsToolConfig,
     ) -> Result<(String, String), ToolError> {
-        // Skip if no files can be handled
-        let files_to_format: Vec<PathBuf> = files
-            .iter()
-            .filter(|file| self.can_handle(file))
-            .cloned()
-            .collect();
-
-        if files_to_format.is_empty() {
+        // Skip if no files to format
+        if files.is_empty() {
             return Ok((String::new(), String::new()));
         }
 
-        // Optimize paths by grouping by directory when possible
-        let optimized_paths = utils::optimize_paths_for_tools(&files_to_format);
+        // We'll use the files directly - we already did path optimization in the command handler
+        let paths_to_format = files;
 
         let mut command = Command::new("ruff");
         command.arg("format");
@@ -342,6 +320,8 @@ impl RuffFormatter {
         // Add check mode if requested
         if config.check {
             command.arg("--check");
+            // In check mode, we want to see which files would be reformatted
+            command.arg("--diff");
         }
 
         // Add extra arguments
@@ -350,7 +330,7 @@ impl RuffFormatter {
         }
 
         // Add all the paths to format
-        for path in &optimized_paths {
+        for path in paths_to_format {
             command.arg(path);
         }
 
@@ -367,7 +347,102 @@ impl RuffFormatter {
         let stdout = String::from_utf8_lossy(&output.stdout).to_string();
         let stderr = String::from_utf8_lossy(&output.stderr).to_string();
 
+        // In check mode, a non-zero exit code means formatting is needed
+        if config.check && !output.status.success() {
+            debug!(
+                "Ruff formatter found formatting issues (exit code: {})",
+                output.status
+            );
+        }
+
         Ok((stdout, stderr))
+    }
+
+    /// Parse formatting output to determine which files need formatting
+    fn parse_check_output(&self, stdout: &str, stderr: &str, files: &[PathBuf]) -> Vec<LintIssue> {
+        let mut issues = Vec::new();
+        let mut found_specific_files = false;
+
+        // First try to find specific files from diff output
+        for line in stdout.lines() {
+            // diff output starts with "--- " for original file
+            if line.starts_with("--- ") {
+                if let Some(file_path_str) = line.strip_prefix("--- ") {
+                    // Remove "(original)" suffix if present
+                    let clean_path = file_path_str.trim_end_matches(" (original)");
+                    if !clean_path.starts_with('/') {
+                        // Skip /dev/null and other special paths
+                        found_specific_files = true;
+                        let file_path = PathBuf::from(clean_path);
+                        issues.push(LintIssue {
+                            severity: IssueSeverity::Style,
+                            message: "File needs formatting".to_string(),
+                            file: Some(file_path),
+                            line: None,
+                            column: None,
+                            code: None,
+                            fix_available: true,
+                        });
+                    }
+                }
+            }
+        }
+
+        // If we couldn't find specific files from diff, check for "Would reformat" messages
+        if !found_specific_files {
+            let would_reformat_regex = Regex::new(r"Would reformat (?:file )?(.+)").unwrap();
+            let files_reformatted_regex = Regex::new(r"(\d+) files? would be reformatted").unwrap();
+
+            // Check for specific files
+            for line in stdout.lines().chain(stderr.lines()) {
+                if let Some(captures) = would_reformat_regex.captures(line) {
+                    if let Some(file_match) = captures.get(1) {
+                        found_specific_files = true;
+                        let file_path = PathBuf::from(file_match.as_str());
+                        issues.push(LintIssue {
+                            severity: IssueSeverity::Style,
+                            message: "File needs formatting".to_string(),
+                            file: Some(file_path),
+                            line: None,
+                            column: None,
+                            code: None,
+                            fix_available: true,
+                        });
+                    }
+                }
+            }
+
+            // If still no specific files but we know formatting is needed
+            if !found_specific_files {
+                for line in stdout.lines().chain(stderr.lines()) {
+                    if let Some(captures) = files_reformatted_regex.captures(line) {
+                        if let Some(count_match) = captures.get(1) {
+                            if let Ok(count) = count_match.as_str().parse::<usize>() {
+                                if count > 0 {
+                                    // Add an issue for each file that needs formatting
+                                    for file in files {
+                                        if self.can_handle(file) {
+                                            issues.push(LintIssue {
+                                                severity: IssueSeverity::Style,
+                                                message: "File needs formatting".to_string(),
+                                                file: Some(file.clone()),
+                                                line: None,
+                                                column: None,
+                                                code: None,
+                                                fix_available: true,
+                                            });
+                                        }
+                                    }
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        issues
     }
 }
 
@@ -406,81 +481,9 @@ impl LintTool for RuffFormatter {
         debug!("Ruff formatter stdout: {}", stdout);
         debug!("Ruff formatter stderr: {}", stderr);
 
-        // When in check mode, ruff format will output "Would reformat X" for files that need formatting
+        // When in check mode, parse output to find files needing formatting
         if config.check {
-            // Extract file paths that would be reformatted
-            let would_reformat_regex = Regex::new(r"Would reformat: (.+)").unwrap();
-            let files_reformatted_regex = Regex::new(r"(\d+) files? would be reformatted").unwrap();
-
-            // Check if any files would be reformatted
-            let mut found_specific_files = false;
-
-            // First check for specific files
-            for line in stdout.lines().chain(stderr.lines()) {
-                if let Some(captures) = would_reformat_regex.captures(line) {
-                    if let Some(file_match) = captures.get(1) {
-                        found_specific_files = true;
-                        let file_path = PathBuf::from(file_match.as_str());
-
-                        issues.push(LintIssue {
-                            severity: IssueSeverity::Style,
-                            message: "File needs formatting".to_string(),
-                            file: Some(file_path),
-                            line: None,
-                            column: None,
-                            code: None,
-                            fix_available: true,
-                        });
-                    }
-                }
-            }
-
-            // If we couldn't extract specific files but know formatting is needed
-            if !found_specific_files {
-                for line in stdout.lines().chain(stderr.lines()) {
-                    if let Some(captures) = files_reformatted_regex.captures(line) {
-                        if let Some(count_match) = captures.get(1) {
-                            if let Ok(count) = count_match.as_str().parse::<usize>() {
-                                if count > 0 {
-                                    // Add a generic issue for each file
-                                    for file in files {
-                                        if self.can_handle(file) {
-                                            issues.push(LintIssue {
-                                                severity: IssueSeverity::Style,
-                                                message: "File needs formatting".to_string(),
-                                                file: Some(file.clone()),
-                                                line: None,
-                                                column: None,
-                                                code: None,
-                                                fix_available: true,
-                                            });
-                                        }
-                                    }
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // If we still haven't found any issues but the command exited with a non-zero status,
-            // assume formatting is needed for all files
-            if issues.is_empty() && !stdout.is_empty() {
-                for file in files {
-                    if self.can_handle(file) {
-                        issues.push(LintIssue {
-                            severity: IssueSeverity::Style,
-                            message: "File needs formatting".to_string(),
-                            file: Some(file.clone()),
-                            line: None,
-                            column: None,
-                            code: None,
-                            fix_available: true,
-                        });
-                    }
-                }
-            }
+            issues = self.parse_check_output(&stdout, &stderr, files);
         }
 
         // Create a result with issues if formatting is needed

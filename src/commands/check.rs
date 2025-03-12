@@ -11,7 +11,7 @@ use crate::models::ToolType;
 use crate::output::{terminal, OutputFormatter};
 use crate::runner::ToolRunner;
 use crate::tools::{LintTool, ToolRegistry};
-use crate::utils::file_selection;
+use crate::utils::path_manager::PathManager;
 use colored::*;
 use log::debug;
 
@@ -67,8 +67,23 @@ where
             args_paths
         };
 
+        // Create and initialize the path manager
+        let mut path_manager = if !all_paths.is_empty() && all_paths[0] != PathBuf::from(".") {
+            // Explicitly provided paths - don't filter them
+            let mut pm = PathManager::with_explicit_paths(all_paths.clone());
+            pm.collect_files(&all_paths, git_modified_only)?;
+            pm
+        } else {
+            // Default directory scanning behavior
+            let mut pm = PathManager::for_discovered_paths();
+            pm.collect_files(&all_paths, git_modified_only)?;
+            pm
+        };
+
+        path_manager.organize_contexts();
+
         // Detect project information
-        let (project_info, detected_files) = self.detector.detect(&all_paths)?;
+        let (project_info, _) = self.detector.detect(&all_paths)?;
 
         // Display detected project info based on verbosity
         if self.verbosity >= Verbosity::Normal {
@@ -128,13 +143,13 @@ where
             return Ok(());
         }
 
-        // Use the files collected during detection if not using git-modified-only
-        let files_to_check = if git_modified_only {
-            // For git-modified-only, we still need to use the file_selection utility
-            file_selection::collect_files_to_process(&all_paths, git_modified_only)?
+        // Collect files to check
+        let files_to_check = if args.paths.is_empty() && paths.is_empty() {
+            // If no paths provided, use all files from the path manager
+            path_manager.get_all_files().to_vec()
         } else {
             // Reuse the files collected during detection
-            detected_files
+            path_manager.get_all_files().to_vec()
         };
 
         // Debug output for files to check
@@ -174,6 +189,9 @@ where
         // Group tools by their config hash to run tools with the same config together
         let mut tool_groups: HashMap<String, ToolGroup> = HashMap::new();
 
+        // Create a map to store paths for each tool
+        let mut tool_paths_map: HashMap<String, Vec<PathBuf>> = HashMap::new();
+
         // Set up all tools first and group them by config
         for linter in &linters {
             // Get tool-specific config or use default
@@ -182,42 +200,41 @@ where
                 .get(linter.name())
                 .cloned()
                 .unwrap_or_else(|| default_tool_config.clone());
-
-            // Set auto_fix from command-line arguments
             config_tool_config.auto_fix = Some(args.auto_fix);
-
-            // Convert to the correct ToolConfig type for the runner
             let config_for_runner = self.convert_tool_config(&config_tool_config);
 
-            // Create a simple hash of the config to use as a key for grouping
-            // This is a simplification - in a real implementation we might want a better way to compare configs
-            let config_key = format!("{:?}", config_for_runner);
+            // Create a hash of the config to group tools with the same config
+            let config_hash = format!("{:?}", config_for_runner);
 
-            // Create a status for this tool
-            let languages = linter.languages();
-            let language_str = if languages.len() == 1 {
-                format!("{:?}", languages[0])
+            // Get paths for this tool
+            let tool_paths = if !path_manager.is_discovered() {
+                // For explicit paths, use them directly without optimization
+                path_manager.get_all_files().to_vec()
             } else {
-                format!("{:?}", languages)
+                // For discovered paths, get optimized paths for this tool
+                path_manager.get_optimized_paths_for_tool(linter.as_ref())
             };
-            let tool_type = format!("{:?}", linter.tool_type());
-            let spinner_index =
-                status_display.add_tool_status(linter.name(), &language_str, &tool_type);
 
-            // Execute the tool - without logging the execution details unless in verbose mode
-            if self.verbosity >= Verbosity::Verbose {
-                debug!(
-                    "Running linter: {} on {} files",
-                    linter.name(),
-                    files_to_check.len()
-                );
+            // Skip if no files to check
+            if tool_paths.is_empty() {
+                if self.verbosity >= Verbosity::Normal {
+                    println!(
+                        "  {} No files to check for {}",
+                        "ℹ️".blue(),
+                        linter.name().cyan()
+                    );
+                }
+                continue;
             }
 
-            // Group tools by their config
+            // Add to the appropriate group
             tool_groups
-                .entry(config_key)
+                .entry(config_hash)
                 .or_default()
-                .push((linter.clone(), spinner_index));
+                .push((linter.clone(), tool_paths.len()));
+
+            // Store the paths for this tool
+            tool_paths_map.insert(linter.name().to_string(), tool_paths);
         }
 
         // Process results and update the status
@@ -226,11 +243,9 @@ where
         let mut total_issues = 0;
 
         // Run each group of tools with the same config in parallel
-        for (_, group) in tool_groups {
+        for (_config_hash, group_tools) in tool_groups {
             // Extract tools and spinner indices
-            let group_tools: Vec<_> = group.iter().map(|(tool, _)| tool.clone()).collect();
-            let group_spinner_indices: Vec<_> = group.iter().map(|(_, idx)| *idx).collect();
-
+            let group_tools: Vec<_> = group_tools.iter().map(|(tool, _)| tool.clone()).collect();
             // Skip empty groups
             if group_tools.is_empty() {
                 continue;
@@ -246,15 +261,52 @@ where
             config_tool_config.auto_fix = Some(args.auto_fix);
             let config_for_runner = self.convert_tool_config(&config_tool_config);
 
-            // Run all tools in this group in parallel
+            // Create a status for each tool in the group
+            let mut spinner_indices = Vec::new();
+            for tool in group_tools.iter() {
+                let languages = tool.languages();
+                let language_str = if languages.len() == 1 {
+                    format!("{:?}", languages[0])
+                } else {
+                    format!("{:?}", languages)
+                };
+                let tool_type = format!("{:?}", tool.tool_type());
+                let spinner_index =
+                    status_display.add_tool_status(tool.name(), &language_str, &tool_type);
+                spinner_indices.push(spinner_index);
+            }
+
+            // Run all tools in this group in parallel with their specific paths
+            let mut tool_specific_paths_vec = Vec::new();
+            for tool in &group_tools {
+                let tool_specific_paths =
+                    tool_paths_map.get(tool.name()).cloned().unwrap_or_default();
+
+                // Log tool execution if verbose
+                if self.verbosity >= Verbosity::Verbose {
+                    debug!(
+                        "Running linter: {} on {} files",
+                        tool.name(),
+                        tool_specific_paths.len()
+                    );
+                }
+
+                tool_specific_paths_vec.push(tool_specific_paths);
+            }
+
+            // Run all tools in this group in parallel with their specific paths
             let group_results = tool_runner
-                .run_tools(group_tools.clone(), &files_to_check, &config_for_runner)
+                .run_tools_with_specific_paths(
+                    group_tools.clone(),
+                    tool_specific_paths_vec,
+                    &config_for_runner,
+                )
                 .await;
 
             // Process results for this group
             for (i, result) in group_results.into_iter().enumerate() {
                 let linter = &group_tools[i];
-                let spinner_index = group_spinner_indices[i];
+                let spinner_index = spinner_indices[i];
 
                 match result {
                     Ok(result) => {

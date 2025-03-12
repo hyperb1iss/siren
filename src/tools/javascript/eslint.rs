@@ -40,23 +40,14 @@ impl ESLint {
         files: &[PathBuf],
         config: &ModelsToolConfig,
     ) -> Result<(Vec<LintIssue>, String, String), ToolError> {
-        // Skip if no files can be handled
-        let files_to_check: Vec<PathBuf> = files
-            .iter()
-            .filter(|file| self.can_handle(file))
-            .cloned()
-            .collect();
-
-        if files_to_check.is_empty() {
+        // Skip if no files to check
+        if files.is_empty() {
             return Ok((Vec::new(), String::new(), String::new()));
         }
 
-        // Use the more generic path optimizer that collapses to top-level directories
-        let optimized_paths = utils::optimize_paths_for_tools(&files_to_check);
-
         // Filter out problematic directories that might contain build artifacts
-        let filtered_paths: Vec<PathBuf> = optimized_paths
-            .into_iter()
+        let filtered_paths: Vec<PathBuf> = files
+            .iter()
             .filter(|path| {
                 // Skip directories that are likely to contain build artifacts or node_modules
                 if path.is_dir() {
@@ -69,6 +60,7 @@ impl ESLint {
                     true
                 }
             })
+            .cloned()
             .collect();
 
         if filtered_paths.is_empty() {
@@ -171,23 +163,14 @@ impl ESLint {
 
     /// Fix issues in multiple files
     fn fix_files(&self, files: &[PathBuf], _config: &ModelsToolConfig) -> Result<(), ToolError> {
-        // Skip if no files can be handled
-        let files_to_fix: Vec<PathBuf> = files
-            .iter()
-            .filter(|file| self.can_handle(file))
-            .cloned()
-            .collect();
-
-        if files_to_fix.is_empty() {
+        // Skip if no files to fix
+        if files.is_empty() {
             return Ok(());
         }
 
-        // Use the more generic path optimizer that collapses to top-level directories
-        let optimized_paths = utils::optimize_paths_for_tools(&files_to_fix);
-
         // Filter out problematic directories that might contain build artifacts
-        let filtered_paths: Vec<PathBuf> = optimized_paths
-            .into_iter()
+        let filtered_paths: Vec<PathBuf> = files
+            .iter()
             .filter(|path| {
                 // Skip directories that are likely to contain build artifacts or node_modules
                 if path.is_dir() {
@@ -200,6 +183,7 @@ impl ESLint {
                     true
                 }
             })
+            .cloned()
             .collect();
 
         if filtered_paths.is_empty() {

@@ -1191,6 +1191,7 @@ dependencies = [
  "env_logger",
  "fern",
  "futures",
+ "glob",
  "globset",
  "ignore",
  "indicatif",
