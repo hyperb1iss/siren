@@ -76,25 +76,16 @@ where
                 .await?;
         }
 
-        // Clone paths from args to avoid ownership issues
-        let args_paths = args.paths.clone();
-
         // Combine paths from the Cli struct and FixArgs
-        let all_paths = if args_paths.is_empty() {
-            if paths.is_empty() {
-                // If no paths provided at all, use current directory
-                vec![PathBuf::from(".")]
-            } else {
-                paths.clone()
-            }
+        let all_paths = if !args.paths.is_empty() {
+            args.paths.clone()
         } else {
-            args_paths
+            paths.clone()
         };
 
         // Create and initialize the path manager
         let mut path_manager = PathManager::new();
         path_manager.collect_files(&all_paths, git_modified_only)?;
-        path_manager.organize_contexts();
 
         // Detect project information
         let (project_info, _) = self.detector.detect(&all_paths)?;
@@ -174,7 +165,7 @@ where
 
         // Debug output for files to fix
         if self.verbosity >= Verbosity::Normal {
-            println!("📂 Found {} files to fix:", files_to_fix.len());
+            println!("📂 Found {} files/directories to fix:", files_to_fix.len());
 
             if self.verbosity >= Verbosity::Verbose {
                 for file in &files_to_fix {

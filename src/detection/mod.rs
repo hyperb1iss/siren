@@ -130,22 +130,22 @@ impl DefaultProjectDetector {
 
 impl ProjectDetector for DefaultProjectDetector {
     fn detect(&self, paths: &[PathBuf]) -> Result<(ProjectInfo, Vec<PathBuf>), SirenError> {
-        if paths.is_empty() {
-            return Err(DetectionError::InvalidDirectory(PathBuf::from(".")).into());
-        }
-
+        // Create a collection to track the languages we detect
         let mut languages = HashMap::new();
-        let mut file_count = 0;
         let mut detected_tools = Vec::new();
+        let mut file_count = 0;
         let mut collected_files = Vec::new();
 
-        // Process each path individually
-        for path in paths {
-            // Check if the path exists
-            if !path.exists() {
-                return Err(DetectionError::InvalidDirectory(path.to_path_buf()).into());
-            }
+        // If no paths are provided, use the current directory
+        let paths_to_process = if paths.is_empty() {
+            log::debug!("No paths provided for detection, using current directory");
+            vec![PathBuf::from(".")]
+        } else {
+            paths.to_vec()
+        };
 
+        // Process each path (directory, specific file, or pattern)
+        for path in &paths_to_process {
             if path.is_file() {
                 // For a single file, just detect its language
                 file_count += 1;
@@ -196,10 +196,13 @@ impl ProjectDetector for DefaultProjectDetector {
         }
 
         // Detect frameworks - only if we're looking at directories
-        let frameworks = if paths.iter().any(|p| p.is_dir()) {
+        let frameworks = if paths_to_process.iter().any(|p| p.is_dir()) {
             // Use the first directory for framework detection
             let default_path = PathBuf::from(".");
-            let first_dir = paths.iter().find(|p| p.is_dir()).unwrap_or(&default_path);
+            let first_dir = paths_to_process
+                .iter()
+                .find(|p| p.is_dir())
+                .unwrap_or(&default_path);
             self.detect_frameworks(first_dir)
         } else {
             Vec::new()

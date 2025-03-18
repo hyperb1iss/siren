@@ -142,7 +142,9 @@ pub fn get_git_modified_files(dir: &Path) -> Result<Vec<PathBuf>, std::io::Error
 /// A vector of resolved path buffers
 pub fn expand_glob_patterns(base_dir: &Path, patterns: &[PathBuf]) -> Vec<PathBuf> {
     if patterns.is_empty() {
-        return vec![base_dir.to_path_buf()];
+        // Return an empty vector instead of base_dir when no patterns provided
+        // This allows PathManager to use its project detection logic
+        return Vec::new();
     }
 
     let mut result = Vec::new();

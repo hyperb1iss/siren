@@ -52,35 +52,16 @@ where
         git_modified_only: bool,
         config: &SirenConfig,
     ) -> Result<(), SirenError> {
-        // Clone paths from args to avoid ownership issues
-        let args_paths = args.paths.clone();
-
         // Combine paths from the Cli struct and CheckArgs
-        let all_paths = if args_paths.is_empty() {
-            if paths.is_empty() {
-                // If no paths provided at all, use current directory
-                vec![PathBuf::from(".")]
-            } else {
-                paths.clone()
-            }
+        let all_paths = if !args.paths.is_empty() {
+            args.paths.clone()
         } else {
-            args_paths
+            paths.clone()
         };
 
         // Create and initialize the path manager
-        let mut path_manager = if !all_paths.is_empty() && all_paths[0] != PathBuf::from(".") {
-            // Explicitly provided paths - don't filter them
-            let mut pm = PathManager::with_explicit_paths(all_paths.clone());
-            pm.collect_files(&all_paths, git_modified_only)?;
-            pm
-        } else {
-            // Default directory scanning behavior
-            let mut pm = PathManager::for_discovered_paths();
-            pm.collect_files(&all_paths, git_modified_only)?;
-            pm
-        };
-
-        path_manager.organize_contexts();
+        let mut path_manager = PathManager::new();
+        path_manager.collect_files(&all_paths, git_modified_only)?;
 
         // Detect project information
         let (project_info, _) = self.detector.detect(&all_paths)?;
@@ -144,13 +125,7 @@ where
         }
 
         // Collect files to check
-        let files_to_check = if args.paths.is_empty() && paths.is_empty() {
-            // If no paths provided, use all files from the path manager
-            path_manager.get_all_files().to_vec()
-        } else {
-            // Reuse the files collected during detection
-            path_manager.get_all_files().to_vec()
-        };
+        let files_to_check = path_manager.get_all_files().to_vec();
 
         // Debug output for files to check
         if self.verbosity >= Verbosity::Normal {
@@ -207,13 +182,7 @@ where
             let config_hash = format!("{:?}", config_for_runner);
 
             // Get paths for this tool
-            let tool_paths = if !path_manager.is_discovered() {
-                // For explicit paths, use them directly without optimization
-                path_manager.get_all_files().to_vec()
-            } else {
-                // For discovered paths, get optimized paths for this tool
-                path_manager.get_optimized_paths_for_tool(linter.as_ref())
-            };
+            let tool_paths = path_manager.get_optimized_paths_for_tool(linter.as_ref());
 
             // Skip if no files to check
             if tool_paths.is_empty() {

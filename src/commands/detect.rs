@@ -32,18 +32,16 @@ where
 
     /// Execute the detect command
     pub fn execute(&self, args: DetectArgs, paths: Vec<PathBuf>) -> Result<(), SirenError> {
-        // Clone paths from args to avoid ownership issues
-        let args_paths = args.paths.clone();
-
         // Combine paths from the Cli struct and DetectArgs
-        let all_paths = if args_paths.is_empty() {
-            paths.clone()
+        let all_paths = if !args.paths.is_empty() {
+            args.paths.clone()
         } else {
-            args_paths
+            paths.clone()
         };
 
         // Create and initialize the path manager
         let mut path_manager = PathManager::new();
+        path_manager.collect_files(&all_paths, false)?;
 
         // Get project root directory
         let dir = all_paths
@@ -62,22 +60,11 @@ where
             Vec::new()
         };
 
-        // Prepare paths for detection
-        let paths_to_detect = if all_paths.is_empty() {
-            vec![PathBuf::from(".")]
-        } else {
-            all_paths.clone()
-        };
-
-        // Collect files using PathManager
-        path_manager.collect_files(&paths_to_detect, false)?;
-        path_manager.organize_contexts();
-
         // Detect project information
         let (project_info, _) = if !patterns.is_empty() {
             self.detector.detect_with_patterns(dir, &patterns)?
         } else {
-            self.detector.detect(&paths_to_detect)?
+            self.detector.detect(&all_paths)?
         };
 
         // Display detected project info

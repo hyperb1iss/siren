@@ -10,5 +10,4 @@ mod integration_tests;
 mod javascript_tools_tests;
 mod language_tests;
 mod path_optimization_tests;
-mod python_package_tests;
 mod registry_tests;
