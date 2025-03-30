@@ -79,22 +79,13 @@ impl Ruff {
                                 let fix_available = diagnostic.get("fix").is_some();
 
                                 // Get full message with code display if available
-                                let mut formatted_message =
+                                let formatted_message =
                                     format!("{}: {}", code_str, message_str);
 
-                                // Add URL if available
-                                if let Some(url) = diagnostic.get("url").and_then(|v| v.as_str()) {
-                                    formatted_message.push_str(&format!("\nSee: {}", url));
-                                }
-
-                                // Add fix information if available
-                                if let Some(fix) = diagnostic.get("fix") {
-                                    if let Some(fix_msg) =
-                                        fix.get("message").and_then(|v| v.as_str())
-                                    {
-                                        formatted_message.push_str(&format!("\nFix: {}", fix_msg));
-                                    }
-                                }
+                                // Remove URL section - we don't want to display URLs in output
+                                
+                                // Remove fix information - we don't want "Fix:" messages in output
+                                // We still track whether a fix is available via fix_available flag
 
                                 debug!(
                                     "Processing diagnostic {}: {} at {}:{}",
